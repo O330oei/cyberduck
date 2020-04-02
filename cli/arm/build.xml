@@ -29,7 +29,7 @@
             </fileset>
         </copy>
         <echo message="Create native bundles with jpackage"/>
-        <exec dir="/usr/lib/jvm/jdk-14+36/bin" executable="jpackage">
+        <exec executable="/usr/lib/jvm/jdk-14+36/bin/jpackage">
             <arg value="--name"/>
             <arg value="${app.name}"/>
             <arg value="--input"/>
