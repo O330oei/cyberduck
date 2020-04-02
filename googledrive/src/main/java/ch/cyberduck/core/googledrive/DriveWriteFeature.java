@@ -26,6 +26,7 @@ import ch.cyberduck.core.features.AttributesFinder;
 import ch.cyberduck.core.features.Find;
 import ch.cyberduck.core.features.Write;
 import ch.cyberduck.core.http.AbstractHttpWriteFeature;
+import ch.cyberduck.core.http.DefaultHttpResponseExceptionMappingService;
 import ch.cyberduck.core.http.DelayedHttpEntityCallable;
 import ch.cyberduck.core.http.HttpResponseOutputStream;
 import ch.cyberduck.core.preferences.PreferencesFactory;
@@ -101,12 +102,12 @@ public class DriveWriteFeature extends AbstractHttpWriteFeature<VersionId> imple
             @Override
             public VersionId call(final AbstractHttpEntity entity) throws BackgroundException {
                 try {
-                    final String base = session.getClient().getRootUrl();
                     // Initiate a resumable upload
                     final HttpEntityEnclosingRequestBase request;
                     if(status.isExists()) {
                         final String fileid = DriveWriteFeature.this.fileid.getFileid(file, new DisabledListProgressListener());
-                        request = new HttpPatch(String.format("%s/upload/drive/v3/files/%s?supportsTeamDrives=true", base, fileid));
+                        request = new HttpPatch(String.format("%supload/drive/v3/files/%s?supportsTeamDrives=true",
+                            session.getClient().getRootUrl(), fileid));
                         if(StringUtils.isNotBlank(status.getMime())) {
                             request.setHeader(HttpHeaders.CONTENT_TYPE, status.getMime());
                         }
@@ -114,11 +115,12 @@ public class DriveWriteFeature extends AbstractHttpWriteFeature<VersionId> imple
                         request.setEntity(entity);
                     }
                     else {
-                        request = new HttpPost(String.format(String.format("%%s/upload/drive/v3/files?uploadType=resumable&supportsTeamDrives=%s", PreferencesFactory.get().getBoolean("googledrive.teamdrive.enable")), base));
+                        request = new HttpPost(String.format("%supload/drive/v3/files?uploadType=resumable&supportsTeamDrives=%s",
+                            session.getClient().getRootUrl(), PreferencesFactory.get().getBoolean("googledrive.teamdrive.enable")));
                         request.setEntity(new StringEntity("{\"name\": \""
                             + file.getName() + "\", \"parents\": [\""
                             + fileid.getFileid(file.getParent(), new DisabledListProgressListener()) + "\"]}",
-                            ContentType.create("application/json", "UTF-8")));
+                            ContentType.create("application/json", StandardCharsets.UTF_8.name())));
                         if(StringUtils.isNotBlank(status.getMime())) {
                             // Set to the media MIME type of the upload data to be transferred in subsequent requests.
                             request.addHeader("X-Upload-Content-Type", status.getMime());
@@ -132,8 +134,8 @@ public class DriveWriteFeature extends AbstractHttpWriteFeature<VersionId> imple
                             case HttpStatus.SC_OK:
                                 break;
                             default:
-                                throw new DriveExceptionMappingService().map(new HttpResponseException(
-                                    response.getStatusLine().getStatusCode(), response.getStatusLine().getReasonPhrase()));
+                                throw new DefaultHttpResponseExceptionMappingService().map(
+                                    new HttpResponseException(response.getStatusLine().getStatusCode(), response.getStatusLine().getReasonPhrase()));
                         }
                     }
                     finally {
@@ -152,23 +154,22 @@ public class DriveWriteFeature extends AbstractHttpWriteFeature<VersionId> imple
                                     case HttpStatus.SC_CREATED:
                                         try (JsonReader reader = new JsonReader(new InputStreamReader(putResponse.getEntity().getContent(), StandardCharsets.UTF_8))) {
                                             reader.beginObject();
-                                            String key = null;
-                                            String secret = null;
-                                            String token = null;
                                             while(reader.hasNext()) {
                                                 final String name = reader.nextName();
                                                 final String value = reader.nextString();
                                                 switch(name) {
                                                     case "id":
-                                                        return new VersionId(value);
+                                                        final VersionId version = new VersionId(value);
+                                                        status.setVersion(version);
+                                                        return version;
                                                 }
                                             }
                                             reader.endObject();
                                         }
                                         break;
                                     default:
-                                        throw new DriveExceptionMappingService().map(new HttpResponseException(
-                                            putResponse.getStatusLine().getStatusCode(), putResponse.getStatusLine().getReasonPhrase()));
+                                        throw new DefaultHttpResponseExceptionMappingService().map(
+                                            new HttpResponseException(response.getStatusLine().getStatusCode(), response.getStatusLine().getReasonPhrase()));
                                 }
                             }
                             finally {
@@ -176,8 +177,8 @@ public class DriveWriteFeature extends AbstractHttpWriteFeature<VersionId> imple
                             }
                         }
                         else {
-                            throw new DriveExceptionMappingService().map(new HttpResponseException(
-                                response.getStatusLine().getStatusCode(), response.getStatusLine().getReasonPhrase()));
+                            throw new DefaultHttpResponseExceptionMappingService().map(
+                                new HttpResponseException(response.getStatusLine().getStatusCode(), response.getStatusLine().getReasonPhrase()));
                         }
                     }
                     return new VersionId(DriveWriteFeature.this.fileid.getFileid(file, new DisabledListProgressListener()));

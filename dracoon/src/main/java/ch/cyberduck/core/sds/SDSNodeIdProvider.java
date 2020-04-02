@@ -35,6 +35,8 @@ import ch.cyberduck.core.sds.io.swagger.client.model.Node;
 import ch.cyberduck.core.sds.io.swagger.client.model.NodeList;
 import ch.cyberduck.core.sds.triplecrypt.TripleCryptConverter;
 import ch.cyberduck.core.transfer.TransferStatus;
+import ch.cyberduck.core.unicode.NFCNormalizer;
+import ch.cyberduck.core.unicode.UnicodeNormalizer;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
@@ -49,6 +51,7 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 public class SDSNodeIdProvider implements IdProvider {
     private static final Logger log = Logger.getLogger(SDSNodeIdProvider.class);
 
+    private static final UnicodeNormalizer normalizer = new NFCNormalizer();
     private static final String ROOT_NODE_ID = "0";
 
     private final SDSSession session;
@@ -88,12 +91,12 @@ public class SDSNodeIdProvider implements IdProvider {
                 type = "file";
             }
             // Top-level nodes only
-            final NodeList nodes = new NodesApi(session.getClient()).getFsNodes(0,
-                Long.parseLong(this.getFileid(file.getParent(), listener)),
-                null, String.format("type:eq:%s|name:cn:%s", type, URIEncoder.encode(file.getName())),
-                null, null, null, StringUtils.EMPTY, null);
+            final NodeList nodes = new NodesApi(session.getClient()).searchFsNodes(URIEncoder.encode(normalizer.normalize(file.getName()).toString()),
+                StringUtils.EMPTY, null, -1,
+                String.format("type:eq:%s|parentPath:eq:%s/", type, file.getParent().isRoot() ? StringUtils.EMPTY : file.getParent().getAbsolute()),
+                null, null, null, null);
             for(Node node : nodes.getItems()) {
-                if(node.getName().equals(file.getName())) {
+                if(node.getName().equals(normalizer.normalize(file.getName()))) {
                     if(log.isInfoEnabled()) {
                         log.info(String.format("Return node %s for file %s", node.getId(), file));
                     }
@@ -112,43 +115,20 @@ public class SDSNodeIdProvider implements IdProvider {
         return id;
     }
 
-    public boolean isEncrypted(final Path file) throws BackgroundException {
+    public boolean isEncrypted(final Path file) {
         if(file.isRoot()) {
             return false;
         }
-        if(!session.userAccount().isEncryptionEnabled()) {
-            return false;
+        if(file.getType().contains(Path.Type.triplecrypt)) {
+            return true;
         }
-        // Get top level share
+        final Path parent = file.getParent();
+        if(parent.getType().contains(Path.Type.triplecrypt)) {
+            // Backward compatibility where flag is missing in room
+            return true;
+        }
         final Path container = new PathContainerService().getContainer(file);
-        if(container.attributes().getCustom().containsKey(SDSAttributesFinderFeature.KEY_ENCRYPTED)) {
-            return Boolean.valueOf(container.attributes().getCustom().get(SDSAttributesFinderFeature.KEY_ENCRYPTED));
-        }
-        if(cache.isCached(container.getParent())) {
-            final AttributedList<Path> list = cache.get(container.getParent());
-            final Path found = list.find(new SimplePathPredicate(container));
-            if(null != found) {
-                return Boolean.valueOf(found.attributes().getCustom().get(SDSAttributesFinderFeature.KEY_ENCRYPTED));
-            }
-        }
-        try {
-            // Top-level nodes only
-            final NodeList nodes = new NodesApi(session.getClient()).getFsNodes(0,
-                Long.parseLong(ROOT_NODE_ID), null, String.format("type:eq:%s|name:cn:%s", "room", container.getName()),
-                null, null, null, StringUtils.EMPTY, null);
-            for(Node node : nodes.getItems()) {
-                if(node.getName().equals(container.getName())) {
-                    final Boolean encrypted = node.getIsEncrypted();
-                    container.attributes().withCustom(SDSAttributesFinderFeature.KEY_ENCRYPTED, String.valueOf(encrypted));
-                    return encrypted;
-                }
-            }
-            log.warn(String.format("Unknown room %s", container));
-            return false;
-        }
-        catch(ApiException e) {
-            throw new SDSExceptionMappingService().map("Failure to read attributes of {0}", e, file);
-        }
+        return container.getType().contains(Path.Type.triplecrypt);
     }
 
     public void setFileKey(final TransferStatus status) throws BackgroundException {

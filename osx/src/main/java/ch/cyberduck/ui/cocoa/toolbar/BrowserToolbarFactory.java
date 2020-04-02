@@ -32,7 +32,6 @@ import ch.cyberduck.binding.foundation.NSString;
 import ch.cyberduck.core.AbstractHostCollection;
 import ch.cyberduck.core.BookmarkNameProvider;
 import ch.cyberduck.core.DefaultCharsetProvider;
-import ch.cyberduck.core.FolderBookmarkCollection;
 import ch.cyberduck.core.LocaleFactory;
 import ch.cyberduck.core.local.Application;
 import ch.cyberduck.core.local.ApplicationFinder;
@@ -57,11 +56,8 @@ import static ch.cyberduck.ui.cocoa.toolbar.BrowserToolbarFactory.BrowserToolbar
 public class BrowserToolbarFactory extends AbstractToolbarFactory implements ToolbarFactory {
 
     private final ApplicationFinder applicationFinder = ApplicationFinderFactory.get();
-
     private final ProxyController quickConnectPopupModel = new QuickConnectModel();
-
-    private final AbstractHostCollection bookmarks
-        = FolderBookmarkCollection.favoritesCollection();
+    private final AbstractHostCollection bookmarks;
 
     private final class QuickConnectModel extends ProxyController implements NSComboBox.DataSource {
         @Override
@@ -251,6 +247,17 @@ public class BrowserToolbarFactory extends AbstractToolbarFactory implements Too
                 return Foundation.selector("deleteFileButtonClicked:");
             }
         },
+        share {
+            @Override
+            public String tooltip() {
+                return LocaleFactory.localizedString("Share…", "Main");
+            }
+
+            @Override
+            public Selector action() {
+                return Foundation.selector("shareFileButtonClicked:");
+            }
+        },
         newfolder {
             @Override
             public String label() {
@@ -385,22 +392,6 @@ public class BrowserToolbarFactory extends AbstractToolbarFactory implements Too
             public Selector action() {
                 return Foundation.selector("quicklookButtonClicked:");
             }
-        },
-        log {
-            @Override
-            public String label() {
-                return LocaleFactory.localizedString(StringUtils.capitalize(this.name()), "Transfer");
-            }
-
-            @Override
-            public String tooltip() {
-                return LocaleFactory.localizedString("Toggle Log Drawer");
-            }
-
-            @Override
-            public Selector action() {
-                return Foundation.selector("toggleLogDrawer:");
-            }
         };
 
         public String label() {
@@ -433,8 +424,9 @@ public class BrowserToolbarFactory extends AbstractToolbarFactory implements Too
             = new HashMap<String, NSToolbarItem>();
 
 
-    public BrowserToolbarFactory(final BrowserController controller) {
+    public BrowserToolbarFactory(final BrowserController controller, final AbstractHostCollection bookmarks) {
         this.controller = controller;
+        this.bookmarks = bookmarks;
     }
 
     @Override
@@ -643,7 +635,6 @@ public class BrowserToolbarFactory extends AbstractToolbarFactory implements Too
                 terminal.name(),
                 archive.name(),
                 BrowserToolbarItem.quicklook.name(),
-                log.name(),
                 disconnect.name(),
                 NSToolbarItem.NSToolbarCustomizeToolbarItemIdentifier,
                 NSToolbarItem.NSToolbarSpaceItemIdentifier,

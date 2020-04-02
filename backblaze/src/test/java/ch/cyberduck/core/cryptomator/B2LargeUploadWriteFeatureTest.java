@@ -28,7 +28,6 @@ import ch.cyberduck.core.b2.B2FileidProvider;
 import ch.cyberduck.core.b2.B2FindFeature;
 import ch.cyberduck.core.b2.B2LargeUploadWriteFeature;
 import ch.cyberduck.core.b2.B2ReadFeature;
-import ch.cyberduck.core.cryptomator.features.CryptoDeleteFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoFindFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoReadFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoWriteFeature;
@@ -42,10 +41,11 @@ import ch.cyberduck.test.IntegrationTest;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RandomUtils;
-import org.cryptomator.cryptolib.api.Cryptor;
 import org.cryptomator.cryptolib.api.FileHeader;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -56,6 +56,7 @@ import java.util.EnumSet;
 import static org.junit.Assert.*;
 
 @Category(IntegrationTest.class)
+@RunWith(value = Parameterized.class)
 public class B2LargeUploadWriteFeatureTest extends AbstractB2Test {
 
     @Test
@@ -63,14 +64,13 @@ public class B2LargeUploadWriteFeatureTest extends AbstractB2Test {
         final Path container = new Path("test-cyberduck", EnumSet.of(Path.Type.volume, Path.Type.directory));
         final CryptoVault cryptomator = new CryptoVault(
             new Path(container, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory)));
-        final Path vault = cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore());
+        final Path vault = cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore(), vaultVersion);
         session.withRegistry(new DefaultVaultRegistry(new DisabledPasswordStore(), new DisabledPasswordCallback(), cryptomator));
         final B2FileidProvider fileid = new B2FileidProvider(session).withCache(cache);
         final CryptoWriteFeature feature = new CryptoWriteFeature<VersionId>(session, new B2LargeUploadWriteFeature(session, fileid), cryptomator);
         final TransferStatus writeStatus = new TransferStatus();
-        final Cryptor cryptor = cryptomator.getCryptor();
-        final FileHeader header = cryptor.fileHeaderCryptor().create();
-        writeStatus.setHeader(cryptor.fileHeaderCryptor().encryptHeader(header));
+        final FileHeader header = cryptomator.getFileHeaderCryptor().create();
+        writeStatus.setHeader(cryptomator.getFileHeaderCryptor().encryptHeader(header));
         writeStatus.setNonces(new RandomNonceGenerator());
         writeStatus.setLength(-1L);
         final Path test = new Path(vault, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.file));
@@ -86,6 +86,6 @@ public class B2LargeUploadWriteFeatureTest extends AbstractB2Test {
         IOUtils.readFully(stream, compare);
         stream.close();
         assertArrayEquals(content, compare);
-        new CryptoDeleteFeature(session, new B2DeleteFeature(session, fileid), cryptomator).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
+        cryptomator.getFeature(session, Delete.class, new B2DeleteFeature(session, fileid)).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
     }
 }

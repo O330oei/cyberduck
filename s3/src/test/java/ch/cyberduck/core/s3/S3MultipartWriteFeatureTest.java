@@ -31,7 +31,7 @@ public class S3MultipartWriteFeatureTest extends AbstractS3Test {
     @Test
     public void testWrite() throws Exception {
         final S3MultipartWriteFeature feature = new S3MultipartWriteFeature(session);
-        final Path container = new Path("test-eu-central-1-cyberduck", EnumSet.of(Path.Type.volume));
+        final Path container = new Path("test-eu-central-1-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
         final TransferStatus status = new TransferStatus();
         status.setLength(-1L);
         final Path file = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
@@ -51,13 +51,12 @@ public class S3MultipartWriteFeatureTest extends AbstractS3Test {
         stream.close();
         assertArrayEquals(content, compare);
         new S3DefaultDeleteFeature(session).delete(Collections.singletonList(file), new DisabledLoginCallback(), new Delete.DisabledCallback());
-        session.close();
     }
 
     @Test
     public void testWriteZeroLength() throws Exception {
         final S3MultipartWriteFeature feature = new S3MultipartWriteFeature(session);
-        final Path container = new Path("test-eu-central-1-cyberduck", EnumSet.of(Path.Type.volume));
+        final Path container = new Path("test-eu-central-1-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
         final byte[] content = RandomUtils.nextBytes(0);
         final TransferStatus status = new TransferStatus();
         status.setLength(-1L);
@@ -80,7 +79,7 @@ public class S3MultipartWriteFeatureTest extends AbstractS3Test {
     @Test
     public void testWriteZeroLengthVersioning() throws Exception {
         final S3MultipartWriteFeature feature = new S3MultipartWriteFeature(session);
-        final Path container = new Path("versioning-test-us-east-1-cyberduck", EnumSet.of(Path.Type.volume));
+        final Path container = new Path("versioning-test-us-east-1-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
         final byte[] content = RandomUtils.nextBytes(0);
         final TransferStatus status = new TransferStatus();
         status.setLength(-1L);

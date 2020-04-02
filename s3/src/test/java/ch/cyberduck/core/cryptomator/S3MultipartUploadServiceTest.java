@@ -24,7 +24,6 @@ import ch.cyberduck.core.Local;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.cryptomator.features.CryptoAttributesFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoBulkFeature;
-import ch.cyberduck.core.cryptomator.features.CryptoDeleteFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoFindFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoReadFeature;
 import ch.cyberduck.core.cryptomator.features.CryptoUploadFeature;
@@ -49,10 +48,11 @@ import ch.cyberduck.test.IntegrationTest;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RandomUtils;
-import org.cryptomator.cryptolib.api.Cryptor;
 import org.cryptomator.cryptolib.api.FileHeader;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -65,6 +65,7 @@ import java.util.UUID;
 import static org.junit.Assert.*;
 
 @Category(IntegrationTest.class)
+@RunWith(value = Parameterized.class)
 public class S3MultipartUploadServiceTest extends AbstractS3Test {
 
     @Test
@@ -74,7 +75,7 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final Path vault = new Path(home, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory));
         final Path test = new Path(vault, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.file));
         final CryptoVault cryptomator = new CryptoVault(vault);
-        cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore());
+        cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore(), vaultVersion);
         session.withRegistry(new DefaultVaultRegistry(new DisabledPasswordStore(), new DisabledPasswordCallback(), cryptomator));
         final CryptoUploadFeature m = new CryptoUploadFeature<>(session,
             new S3MultipartUploadService(session, new S3WriteFeature(session), 5L * 1024L * 1024L, 5),
@@ -84,9 +85,8 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final byte[] content = RandomUtils.nextBytes(length);
         IOUtils.write(content, local.getOutputStream(false));
         final TransferStatus writeStatus = new TransferStatus();
-        final Cryptor cryptor = cryptomator.getCryptor();
-        final FileHeader header = cryptor.fileHeaderCryptor().create();
-        writeStatus.setHeader(cryptor.fileHeaderCryptor().encryptHeader(header));
+        final FileHeader header = cryptomator.getFileHeaderCryptor().create();
+        writeStatus.setHeader(cryptomator.getFileHeaderCryptor().encryptHeader(header));
         writeStatus.setLength(content.length);
         m.upload(test, local, new BandwidthThrottle(BandwidthThrottle.UNLIMITED), new DisabledStreamListener(), writeStatus, null);
         assertEquals((long) content.length, writeStatus.getOffset(), 0L);
@@ -98,10 +98,9 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final InputStream in = new CryptoReadFeature(session, new S3ReadFeature(session), cryptomator).read(test, readStatus, new DisabledConnectionCallback());
         new StreamCopier(readStatus, readStatus).transfer(in, buffer);
         assertArrayEquals(content, buffer.toByteArray());
-        new CryptoDeleteFeature(session, new S3DefaultDeleteFeature(session), cryptomator).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
+        cryptomator.getFeature(session, Delete.class, new S3DefaultDeleteFeature(session)).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
         local.delete();
-        session.close();
-    }
+}
 
     @Test
     public void testUpload() throws Exception {
@@ -110,7 +109,7 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final Path vault = new Path(home, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory));
         final Path test = new Path(vault, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.file));
         final CryptoVault cryptomator = new CryptoVault(vault);
-        cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore());
+        cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore(), vaultVersion);
         session.withRegistry(new DefaultVaultRegistry(new DisabledPasswordStore(), new DisabledPasswordCallback(), cryptomator));
         final CryptoUploadFeature m = new CryptoUploadFeature<>(session,
             new S3MultipartUploadService(session, new S3WriteFeature(session), 5L * 1024L * 1024L, 5),
@@ -119,9 +118,8 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final byte[] content = RandomUtils.nextBytes(6 * 1024 * 1024);
         IOUtils.write(content, local.getOutputStream(false));
         final TransferStatus writeStatus = new TransferStatus();
-        final Cryptor cryptor = cryptomator.getCryptor();
-        final FileHeader header = cryptor.fileHeaderCryptor().create();
-        writeStatus.setHeader(cryptor.fileHeaderCryptor().encryptHeader(header));
+        final FileHeader header = cryptomator.getFileHeaderCryptor().create();
+        writeStatus.setHeader(cryptomator.getFileHeaderCryptor().encryptHeader(header));
         writeStatus.setLength(content.length);
         m.upload(test, local, new BandwidthThrottle(BandwidthThrottle.UNLIMITED), new DisabledStreamListener(), writeStatus, null);
         assertEquals((long) content.length, writeStatus.getOffset(), 0L);
@@ -133,9 +131,8 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final InputStream in = new CryptoReadFeature(session, new S3ReadFeature(session), cryptomator).read(test, readStatus, new DisabledConnectionCallback());
         new StreamCopier(readStatus, readStatus).transfer(in, buffer);
         assertArrayEquals(content, buffer.toByteArray());
-        new CryptoDeleteFeature(session, new S3DefaultDeleteFeature(session), cryptomator).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
+        cryptomator.getFeature(session, Delete.class, new S3DefaultDeleteFeature(session)).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
         local.delete();
-        session.close();
     }
 
     @Test
@@ -145,7 +142,7 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final Path vault = new Path(home, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory));
         final Path test = new Path(vault, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.file));
         final CryptoVault cryptomator = new CryptoVault(vault);
-        cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore());
+        cryptomator.create(session, null, new VaultCredentials("test"), new DisabledPasswordStore(), vaultVersion);
         session.withRegistry(new DefaultVaultRegistry(new DisabledPasswordStore(), new DisabledPasswordCallback(), cryptomator));
         final TransferStatus writeStatus = new TransferStatus();
         final byte[] content = RandomUtils.nextBytes(6 * 1024 * 1024);
@@ -167,8 +164,7 @@ public class S3MultipartUploadServiceTest extends AbstractS3Test {
         final InputStream in = new CryptoReadFeature(session, new S3ReadFeature(session), cryptomator).read(test, readStatus, new DisabledConnectionCallback());
         new StreamCopier(readStatus, readStatus).transfer(in, buffer);
         assertArrayEquals(content, buffer.toByteArray());
-        new CryptoDeleteFeature(session, new S3DefaultDeleteFeature(session), cryptomator).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
+        cryptomator.getFeature(session, Delete.class, new S3DefaultDeleteFeature(session)).delete(Arrays.asList(test, vault), new DisabledLoginCallback(), new Delete.DisabledCallback());
         local.delete();
-        session.close();
     }
 }

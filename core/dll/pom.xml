@@ -5,7 +5,7 @@
         <groupId>ch.cyberduck</groupId>
         <artifactId>parent</artifactId>
         <relativePath>../../pom.xml</relativePath>
-        <version>6.9.3-SNAPSHOT</version>
+        <version>7.3.1-SNAPSHOT</version>
     </parent>
     <artifactId>Cyberduck.Core</artifactId>
     <packaging>pom</packaging>
@@ -57,7 +57,7 @@
                                             <groupId>ch.iterate</groupId>
                                             <artifactId>ikvm</artifactId>
                                             <type>zip</type>
-                                            <version>8.3</version>
+                                            <version>8.3.1</version>
                                         </artifactItem>
                                     </artifactItems>
                                     <outputDirectory>${project.build.directory}</outputDirectory>
@@ -93,37 +93,37 @@
             </build>
             <dependencies>
                 <dependency>
-                    <groupId>net.adoptopenjdk</groupId>
+                    <groupId>net.java.openjdk</groupId>
                     <artifactId>sunmscapi</artifactId>
-                    <classifier>x86_32</classifier>
+                    <classifier>x86_64</classifier>
                     <type>dll</type>
-                    <version>8u192</version>
+                    <version>8u45</version>
                     <scope>runtime</scope>
                 </dependency>
                 <dependency>
-                    <groupId>net.adoptopenjdk</groupId>
+                    <groupId>net.java.openjdk</groupId>
                     <artifactId>sunmscapi</artifactId>
-                    <version>8u192</version>
+                    <version>8u45</version>
                     <scope>runtime</scope>
                 </dependency>
                 <dependency>
-                    <groupId>net.adoptopenjdk</groupId>
+                    <groupId>net.java.openjdk</groupId>
                     <artifactId>sunec</artifactId>
-                    <classifier>x86_32</classifier>
+                    <classifier>x86_64</classifier>
                     <type>dll</type>
-                    <version>8u192</version>
+                    <version>8u45</version>
                     <scope>runtime</scope>
                 </dependency>
                 <dependency>
-                    <groupId>net.adoptopenjdk</groupId>
+                    <groupId>net.java.openjdk</groupId>
                     <artifactId>sunec</artifactId>
-                    <version>8u192</version>
+                    <version>8u45</version>
                     <scope>runtime</scope>
                 </dependency>
                 <dependency>
                     <groupId>net.java.dev.jna</groupId>
                     <artifactId>jnidispatch</artifactId>
-                    <classifier>x86_32</classifier>
+                    <classifier>x86_64</classifier>
                     <type>dll</type>
                     <version>${jna-version}</version>
                     <scope>runtime</scope>

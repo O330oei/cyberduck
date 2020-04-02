@@ -18,6 +18,7 @@ package ch.cyberduck.core.cloudfront;
  * dkocher@cyberduck.ch
  */
 
+import ch.cyberduck.core.DescriptiveUrlBag;
 import ch.cyberduck.core.DisabledCancelCallback;
 import ch.cyberduck.core.DisabledHostKeyCallback;
 import ch.cyberduck.core.DisabledProgressListener;
@@ -27,16 +28,15 @@ import ch.cyberduck.core.LoginConnectionService;
 import ch.cyberduck.core.PasswordStoreFactory;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathCache;
+import ch.cyberduck.core.PathContainerService;
 import ch.cyberduck.core.PathNormalizer;
 import ch.cyberduck.core.WebUrlProvider;
 import ch.cyberduck.core.cdn.Distribution;
+import ch.cyberduck.core.cdn.DistributionUrlProvider;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.features.Location;
 import ch.cyberduck.core.s3.S3Protocol;
 import ch.cyberduck.core.s3.S3Session;
-import ch.cyberduck.core.ssl.DefaultTrustManagerHostnameCallback;
-import ch.cyberduck.core.ssl.KeychainX509KeyManager;
-import ch.cyberduck.core.ssl.KeychainX509TrustManager;
 import ch.cyberduck.core.ssl.X509KeyManager;
 import ch.cyberduck.core.ssl.X509TrustManager;
 
@@ -44,31 +44,27 @@ import org.apache.log4j.Logger;
 
 import java.net.URI;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 public class CustomOriginCloudFrontDistributionConfiguration extends CloudFrontDistributionConfiguration {
     private static final Logger log = Logger.getLogger(CustomOriginCloudFrontDistributionConfiguration.class);
 
-    private final Host origin;
+    private final PathContainerService containerService
+        = new PathContainerService();
 
-    public CustomOriginCloudFrontDistributionConfiguration(final Host origin) {
-        this(origin,
-            new KeychainX509TrustManager(new DefaultTrustManagerHostnameCallback(
-                new Host(new S3Protocol(), new S3Protocol().getDefaultHostname()))
-            ),
-            new KeychainX509KeyManager(
-                new Host(new S3Protocol(), new S3Protocol().getDefaultHostname())
-            )
-        );
-    }
+    private final Map<Path, Distribution> cache = new HashMap<Path, Distribution>();
+
+    private final Host origin;
 
     public CustomOriginCloudFrontDistributionConfiguration(final Host origin,
                                                            final X509TrustManager trust,
                                                            final X509KeyManager key) {
         // Configure with the same host as S3 to get the same credentials from the keychain.
         super(new S3Session(new Host(new S3Protocol(),
-            new S3Protocol().getDefaultHostname(), origin.getCdnCredentials()), trust, key), Collections.emptyMap());
+            new S3Protocol().getDefaultHostname(), origin.getCdnCredentials()), trust, key), trust, key, Collections.emptyMap());
         this.origin = origin;
     }
 
@@ -84,12 +80,14 @@ public class CustomOriginCloudFrontDistributionConfiguration extends CloudFrontD
 
     @Override
     public Distribution read(final Path file, final Distribution.Method method, final LoginCallback prompt) throws BackgroundException {
-        return this.connected(new Connected<Distribution>() {
+        final Distribution distribution = this.connected(new Connected<Distribution>() {
             @Override
             public Distribution call() throws BackgroundException {
                 return CustomOriginCloudFrontDistributionConfiguration.super.read(file, method, prompt);
             }
         }, prompt);
+        cache.put(containerService.getContainer(file), distribution);
+        return distribution;
     }
 
     @Override
@@ -120,5 +118,13 @@ public class CustomOriginCloudFrontDistributionConfiguration extends CloudFrontD
     @Override
     protected Location.Name getRegion(final Path container) {
         return Location.unknown;
+    }
+
+    @Override
+    public DescriptiveUrlBag toUrl(final Path file) {
+        if(cache.containsKey(containerService.getContainer(file))) {
+            return new DistributionUrlProvider(cache.get(containerService.getContainer(file))).toUrl(file);
+        }
+        return DescriptiveUrlBag.empty();
     }
 }

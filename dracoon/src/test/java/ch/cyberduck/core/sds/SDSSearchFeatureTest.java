@@ -24,6 +24,7 @@ import ch.cyberduck.core.SimplePathPredicate;
 import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.features.Delete;
 import ch.cyberduck.core.transfer.TransferStatus;
+import ch.cyberduck.core.unicode.NFDNormalizer;
 import ch.cyberduck.test.IntegrationTest;
 import ch.cyberduck.ui.browser.SearchFilter;
 
@@ -41,10 +42,10 @@ public class SDSSearchFeatureTest extends AbstractSDSTest {
 
     @Test
     public void testSearch() throws Exception {
-        final String name = new AlphanumericRandomStringService().random();
+        final String name = new NFDNormalizer().normalize(String.format("ä%s", new AlphanumericRandomStringService().random())).toString();
         final SDSNodeIdProvider nodeid = new SDSNodeIdProvider(session).withCache(cache);
         final Path room = new SDSDirectoryFeature(session, nodeid).mkdir(
-                new Path(new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory, Path.Type.volume)), null, new TransferStatus());
+            new Path(new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory, Path.Type.volume, Path.Type.triplecrypt)), null, new TransferStatus());
         final Path directory = new SDSDirectoryFeature(session, nodeid).mkdir(new Path(room, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.directory)), null, new TransferStatus());
         final Path file = new SDSTouchFeature(session, nodeid).touch(new Path(directory, name, EnumSet.of(Path.Type.file)), new TransferStatus());
         final SDSSearchFeature feature = new SDSSearchFeature(session, nodeid);

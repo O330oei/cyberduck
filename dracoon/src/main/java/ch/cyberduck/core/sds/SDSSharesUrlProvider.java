@@ -15,10 +15,12 @@ package ch.cyberduck.core.sds;
  * GNU General Public License for more details.
  */
 
+import ch.cyberduck.core.Acl;
 import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.DescriptiveUrl;
 import ch.cyberduck.core.DisabledListProgressListener;
 import ch.cyberduck.core.LocaleFactory;
+import ch.cyberduck.core.LoginOptions;
 import ch.cyberduck.core.PasswordCallback;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathContainerService;
@@ -35,8 +37,8 @@ import ch.cyberduck.core.sds.io.swagger.client.model.FileKey;
 import ch.cyberduck.core.sds.io.swagger.client.model.KeyValueEntry;
 import ch.cyberduck.core.sds.io.swagger.client.model.UploadShare;
 import ch.cyberduck.core.sds.io.swagger.client.model.UserKeyPairContainer;
-import ch.cyberduck.core.sds.triplecrypt.CryptoExceptionMappingService;
 import ch.cyberduck.core.sds.triplecrypt.TripleCryptConverter;
+import ch.cyberduck.core.sds.triplecrypt.TripleCryptExceptionMappingService;
 import ch.cyberduck.core.sds.triplecrypt.TripleCryptKeyPair;
 
 import org.apache.commons.lang3.StringUtils;
@@ -78,40 +80,61 @@ public class SDSSharesUrlProvider implements PromptUrlProvider<CreateDownloadSha
                 for(KeyValueEntry entry : configuration) {
                     if("manageDownloadShare".equals(entry.getKey())) {
                         if("false".equalsIgnoreCase(entry.getValue())) {
+                            log.warn(String.format("Not supported for file %s with manageDownloadShare=false", file));
                             return false;
                         }
                     }
                 }
                 if(file.isDirectory()) {
-                    if(Boolean.valueOf(containerService.getContainer(file).attributes().getCustom().get(SDSAttributesFinderFeature.KEY_ENCRYPTED))) {
+                    if(nodeid.isEncrypted(containerService.getContainer(file))) {
+                        log.warn(String.format("Not supported for file %s in encrypted room", file));
                         // In encrypted rooms only files can be shared
                         return false;
                     }
                 }
-                return new SDSPermissionsFeature(session, nodeid).containsRole(file, SDSPermissionsFeature.DOWNLOAD_SHARE_ROLE);
+                final Acl.Role role = SDSPermissionsFeature.DOWNLOAD_SHARE_ROLE;
+                final boolean found = new SDSPermissionsFeature(session, nodeid).containsRole(file, role);
+                if(!found) {
+                    log.warn(String.format("Not supported for file %s with missing role %s", file, role));
+                }
+                return found;
             }
             case upload: {
                 // An upload account can be created for directories and rooms only
                 if(!file.isDirectory()) {
+                    log.warn(String.format("Not supported for file %s", file));
                     return false;
                 }
                 for(KeyValueEntry entry : configuration) {
                     if("manageUploadShare".equals(entry.getKey())) {
                         if("false".equalsIgnoreCase(entry.getValue())) {
+                            log.warn(String.format("Not supported for file %s with manageUploadShare=false", file));
                             return false;
                         }
                     }
                 }
-                return new SDSPermissionsFeature(session, nodeid).containsRole(file, SDSPermissionsFeature.UPLOAD_SHARE_ROLE);
+                final Acl.Role role = SDSPermissionsFeature.UPLOAD_SHARE_ROLE;
+                final boolean found = new SDSPermissionsFeature(session, nodeid).containsRole(file, role);
+                if(!found) {
+                    log.warn(String.format("Not supported for file %s with missing role %s", file, role));
+                }
+                return found;
             }
         }
         return false;
     }
 
     @Override
-    public DescriptiveUrl toDownloadUrl(final Path file, final CreateDownloadShareRequest options,
+    public DescriptiveUrl toDownloadUrl(final Path file, CreateDownloadShareRequest options,
                                         final PasswordCallback callback) throws BackgroundException {
         try {
+            if(log.isDebugEnabled()) {
+                log.debug(String.format("Create download share for %s", file));
+            }
+            if(null == options) {
+                options = new CreateDownloadShareRequest();
+                log.warn(String.format("Use default share options %s", options));
+            }
             final Long fileid = Long.parseLong(nodeid.getFileid(file, new DisabledListProgressListener()));
             if(nodeid.isEncrypted(file)) {
                 // get existing file key associated with the sharing user
@@ -125,7 +148,16 @@ public class SDSSharesUrlProvider implements PromptUrlProvider<CreateDownloadSha
                 final Credentials passphrase = new TripleCryptKeyPair().unlock(callback, session.getHost(), userKeyPair);
                 final PlainFileKey plainFileKey = Crypto.decryptFileKey(TripleCryptConverter.toCryptoEncryptedFileKey(key), privateKey, passphrase.getPassword());
                 // encrypt file key with a new key pair
-                final UserKeyPair pair = Crypto.generateUserKeyPair(options.getPassword());
+                final UserKeyPair pair;
+                if(null == options.getPassword()) {
+                    pair = Crypto.generateUserKeyPair(callback.prompt(
+                        session.getHost(), LocaleFactory.localizedString("Passphrase", "Cryptomator"),
+                        LocaleFactory.localizedString("Provide additional login credentials", "Credentials"), new LoginOptions().icon(session.getHost().getProtocol().disk())
+                    ).getPassword());
+                }
+                else {
+                    pair = Crypto.generateUserKeyPair(options.getPassword());
+                }
                 final EncryptedFileKey encryptedFileKey = Crypto.encryptFileKey(plainFileKey, pair.getUserPublicKey());
                 options.setPassword(null);
                 options.setKeyPair(TripleCryptConverter.toSwaggerUserKeyPairContainer(pair));
@@ -155,13 +187,20 @@ public class SDSSharesUrlProvider implements PromptUrlProvider<CreateDownloadSha
             throw new SDSExceptionMappingService().map(e);
         }
         catch(CryptoException e) {
-            throw new CryptoExceptionMappingService().map(e);
+            throw new TripleCryptExceptionMappingService().map(e);
         }
     }
 
     @Override
-    public DescriptiveUrl toUploadUrl(final Path file, final CreateUploadShareRequest options, final PasswordCallback callback) throws BackgroundException {
+    public DescriptiveUrl toUploadUrl(final Path file, CreateUploadShareRequest options, final PasswordCallback callback) throws BackgroundException {
         try {
+            if(log.isDebugEnabled()) {
+                log.debug(String.format("Create upload share for %s", file));
+            }
+            if(null == options) {
+                options = new CreateUploadShareRequest();
+                log.warn(String.format("Use default share options %s", options));
+            }
             final UploadShare share = new SharesApi(session.getClient()).createUploadShare(
                 options.targetId(Long.parseLong(nodeid.getFileid(file, new DisabledListProgressListener()))), StringUtils.EMPTY, null);
             final String help;

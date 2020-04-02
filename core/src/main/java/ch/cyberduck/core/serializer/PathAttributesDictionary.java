@@ -18,26 +18,33 @@ package ch.cyberduck.core.serializer;
  * feedback@cyberduck.ch
  */
 
+import ch.cyberduck.core.AttributedList;
+import ch.cyberduck.core.DescriptiveUrl;
 import ch.cyberduck.core.DeserializerFactory;
+import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathAttributes;
 import ch.cyberduck.core.io.Checksum;
+import ch.cyberduck.core.io.HashAlgorithm;
 
+import java.net.URI;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 public class PathAttributesDictionary {
 
-    private final DeserializerFactory deserializer;
+    private final DeserializerFactory factory;
 
     public PathAttributesDictionary() {
-        this.deserializer = new DeserializerFactory();
+        this.factory = new DeserializerFactory();
     }
 
-    public PathAttributesDictionary(final DeserializerFactory deserializer) {
-        this.deserializer = deserializer;
+    public PathAttributesDictionary(final DeserializerFactory factory) {
+        this.factory = factory;
     }
 
     public <T> PathAttributes deserialize(T serialized) {
-        final Deserializer dict = deserializer.create(serialized);
+        final Deserializer dict = factory.create(serialized);
         final PathAttributes attributes = new PathAttributes();
         final String sizeObj = dict.stringForKey("Size");
         if(sizeObj != null) {
@@ -51,6 +58,18 @@ public class PathAttributesDictionary {
         if(revisionObj != null) {
             attributes.setRevision(Long.parseLong(revisionObj));
         }
+        final List<T> versionsObj = dict.listForKey("Versions");
+        if(versionsObj != null) {
+            final AttributedList<Path> versions = new AttributedList<>();
+            for(T versionDict : versionsObj) {
+                versions.add(new PathDictionary(factory).deserialize(versionDict));
+            }
+            attributes.setVersions(versions);
+        }
+        final String etagObj = dict.stringForKey("ETag");
+        if(etagObj != null) {
+            attributes.setETag(dict.stringForKey("ETag"));
+        }
         final Object permissionObj = dict.objectForKey("Permission");
         if(permissionObj != null) {
             attributes.setPermission(new PermissionDictionary().deserialize(permissionObj));
@@ -59,18 +78,33 @@ public class PathAttributesDictionary {
         if(aclObj != null) {
             attributes.setAcl(new AclDictionary().deserialize(aclObj));
         }
-        attributes.setChecksum(Checksum.parse(dict.stringForKey("Checksum")));
+        final Object linkObj = dict.stringForKey("Link");
+        if(linkObj != null) {
+            attributes.setLink(new DescriptiveUrl(URI.create(dict.stringForKey("Link")), DescriptiveUrl.Type.http));
+        }
+        if(dict.mapForKey("Checksum") != null) {
+            final Map<String, String> checksum = dict.mapForKey("Checksum");
+            attributes.setChecksum(new Checksum(HashAlgorithm.valueOf(checksum.get("Algorithm")), checksum.get("Hash")));
+        }
+        else {
+            attributes.setChecksum(Checksum.parse(dict.stringForKey("Checksum")));
+        }
         attributes.setVersionId(dict.stringForKey("Version"));
+        attributes.setLockId(dict.stringForKey("Lock Id"));
         final String duplicateObj = dict.stringForKey("Duplicate");
         if(duplicateObj != null) {
             attributes.setDuplicate(Boolean.valueOf(duplicateObj));
+        }
+        final String hiddenObj = dict.stringForKey("Hidden");
+        if(hiddenObj != null) {
+            attributes.setHidden(Boolean.valueOf(hiddenObj));
         }
         attributes.setMetadata(Collections.emptyMap());
         attributes.setRegion(dict.stringForKey("Region"));
         attributes.setStorageClass(dict.stringForKey("Storage Class"));
         final Object vaultObj = dict.objectForKey("Vault");
         if(vaultObj != null) {
-            attributes.setVault(new PathDictionary().deserialize(vaultObj));
+            attributes.setVault(new PathDictionary(factory).deserialize(vaultObj));
         }
         return attributes;
     }

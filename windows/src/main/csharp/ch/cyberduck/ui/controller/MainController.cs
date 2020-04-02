@@ -34,6 +34,8 @@ using ch.cyberduck.core.azure;
 using ch.cyberduck.core.b2;
 using ch.cyberduck.core.manta;
 using ch.cyberduck.core.bonjour;
+using ch.cyberduck.core.brick;
+using ch.cyberduck.core.nextcloud;
 using ch.cyberduck.core.dav;
 using ch.cyberduck.core.dropbox;
 using ch.cyberduck.core.ftp;
@@ -53,6 +55,7 @@ using ch.cyberduck.core.sds;
 using ch.cyberduck.core.serializer;
 using ch.cyberduck.core.sftp;
 using ch.cyberduck.core.spectra;
+using ch.cyberduck.core.storegate;
 using ch.cyberduck.core.threading;
 using ch.cyberduck.core.transfer;
 using ch.cyberduck.core.updater;
@@ -74,6 +77,7 @@ using ch.cyberduck.core.exception;
 using Application = ch.cyberduck.core.local.Application;
 using ArrayList = System.Collections.ArrayList;
 using UnhandledExceptionEventArgs = System.UnhandledExceptionEventArgs;
+using ch.cyberduck.core.oauth;
 
 namespace Ch.Cyberduck.Ui.Controller
 {
@@ -97,7 +101,7 @@ namespace Ch.Cyberduck.Ui.Controller
         /// Saved browsers
         /// </summary>
         private readonly AbstractHostCollection _sessions =
-            new FolderBookmarkCollection(
+            new BookmarkCollection(
                 LocalFactory.get(SupportDirectoryFinderFactory.get().find(), "Sessions"),
                 "session");
 
@@ -135,7 +139,7 @@ namespace Ch.Cyberduck.Ui.Controller
         static MainController()
         {
             StructureMapBootstrapper.Bootstrap();
-            PreferencesFactory.set(new ApplicationPreferences());
+            
             if (!(Debugger.IsAttached || Utils.IsRunningAsUWP))
             {
                 // Add the event handler for handling UI thread exceptions to the event.
@@ -154,8 +158,7 @@ namespace Ch.Cyberduck.Ui.Controller
                 new DAVSSLProtocol(), new SwiftProtocol(), new S3Protocol(), new GoogleStorageProtocol(),
                 new AzureProtocol(), new IRODSProtocol(), new SpectraProtocol(), new B2Protocol(), new DriveProtocol(),
                 new DropboxProtocol(), new HubicProtocol(), new LocalProtocol(), new OneDriveProtocol(), new SharepointProtocol(),
-                new MantaProtocol(),
-                new SDSProtocol());
+                new MantaProtocol(), new SDSProtocol(), new StoregateProtocol(), new BrickProtocol(), new NextcloudProtocol());
             ProtocolFactory.get().loadDefaultProfiles();
         }
 
@@ -284,7 +287,7 @@ namespace Ch.Cyberduck.Ui.Controller
             {
                 return; //No default bookmark given
             }
-            Host bookmark = FolderBookmarkCollection.favoritesCollection().lookup(defaultBookmark);
+            Host bookmark = BookmarkCollection.defaultCollection().lookup(defaultBookmark);
             if (null == bookmark)
             {
                 Logger.info("Default bookmark no more available");
@@ -391,6 +394,12 @@ namespace Ch.Cyberduck.Ui.Controller
         void ICyberduck.Connect()
         {
             // Dummy implementation.
+        }
+
+        void ICyberduck.OAuth(string state, string code)
+        {
+            var oauth = OAuth2TokenListenerRegistry.get();
+            oauth.notify(state, code);
         }
 
         void ICyberduck.NewInstance()
@@ -537,7 +546,7 @@ namespace Ch.Cyberduck.Ui.Controller
             {
                 var handler = SchemeHandlerFactory.get();
                 if (
-                    !handler.isDefaultHandler(Arrays.asList(Scheme.ftp, Scheme.ftps, Scheme.sftp),
+                    !handler.isDefaultHandler(Arrays.asList(Scheme.ftp.name(), Scheme.ftps.name(), Scheme.sftp.name()),
                         new Application(System.Windows.Forms.Application.ExecutablePath)))
                 {
                     Core.Utils.CommandBox(LocaleFactory.localizedString("Default Protocol Handler", "Preferences"),
@@ -559,12 +568,15 @@ namespace Ch.Cyberduck.Ui.Controller
                             switch (option)
                             {
                                 case 0:
-                                    handler.setDefaultHandler(Arrays.asList(Scheme.ftp, Scheme.ftps, Scheme.sftp),
-                                        new Application(System.Windows.Forms.Application.ExecutablePath));
+                                    handler.setDefaultHandler(new Application(System.Windows.Forms.Application.ExecutablePath),
+                                        Arrays.asList(Scheme.ftp.name(), Scheme.ftps.name(), Scheme.sftp.name()));
                                     break;
                             }
                         });
                 }
+                // Register OAuth handler
+                handler.setDefaultHandler(new Application(System.Windows.Forms.Application.ExecutablePath),
+                    Arrays.asList(PreferencesFactory.get().getProperty("oauth.handler.scheme")));
             }
         }
 
@@ -699,7 +711,7 @@ namespace Ch.Cyberduck.Ui.Controller
             {
                 foreach (ThirdpartyBookmarkCollection c in thirdpartyBookmarks)
                 {
-                    AbstractHostCollection bookmarks = FolderBookmarkCollection.favoritesCollection();
+                    AbstractHostCollection bookmarks = BookmarkCollection.defaultCollection();
                     c.filter(bookmarks);
                     if (!c.isEmpty())
                     {
@@ -723,7 +735,7 @@ namespace Ch.Cyberduck.Ui.Controller
                                 switch (option)
                                 {
                                     case 0:
-                                        FolderBookmarkCollection.favoritesCollection().addAll(c1);
+                                        BookmarkCollection.defaultCollection().addAll(c1);
                                         // Flag as imported
                                         PreferencesFactory.get().setProperty(c1.getConfiguration(), true);
                                         break;
@@ -744,7 +756,7 @@ namespace Ch.Cyberduck.Ui.Controller
             // Load all bookmarks in background
             _controller.Background(() =>
             {
-                AbstractHostCollection c = FolderBookmarkCollection.favoritesCollection();
+                AbstractHostCollection c = BookmarkCollection.defaultCollection();
                 c.load();
                 bookmarksSemaphore.Signal();
             }, () =>
@@ -849,8 +861,6 @@ namespace Ch.Cyberduck.Ui.Controller
                 InitStoreContext();
             }
 
-            NotificationServiceFactory.get().setup();
-
             InitializeTransfers();
             InitializeSessions();
 
@@ -876,7 +886,7 @@ namespace Ch.Cyberduck.Ui.Controller
                 while (iterator.hasNext())
                 {
                     Host host = (Host)iterator.next();
-                    var file = FolderBookmarkCollection.favoritesCollection().getFile(host);
+                    var file = BookmarkCollection.defaultCollection().getFile(host);
                     if (file.exists())
                     {
                         bookmarkCategory.AddJumpListItems(new JumpListLink(file.getAbsolute(), BookmarkNameProvider.toString(host))
@@ -918,9 +928,9 @@ namespace Ch.Cyberduck.Ui.Controller
             {
                 PreferencesFactory.get().save();
             }
-            catch (UnauthorizedAccessException unauthorizedAccessException)
+            catch (Exception e)
             {
-                Logger.fatal("Could not save preferences", unauthorizedAccessException);
+                Logger.fatal("Could not save preferences", e);
             }
             if (_updater != null && !updating)
             {

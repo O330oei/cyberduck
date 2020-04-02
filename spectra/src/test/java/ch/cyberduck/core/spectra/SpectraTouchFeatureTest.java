@@ -23,13 +23,13 @@ import ch.cyberduck.core.Path;
 import ch.cyberduck.core.Scheme;
 import ch.cyberduck.core.features.Delete;
 import ch.cyberduck.core.proxy.Proxy;
-import ch.cyberduck.core.s3.S3FindFeature;
 import ch.cyberduck.core.s3.S3MetadataFeature;
 import ch.cyberduck.core.ssl.DefaultX509KeyManager;
 import ch.cyberduck.core.ssl.DisabledX509TrustManager;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.test.IntegrationTest;
 
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -52,12 +52,12 @@ public class SpectraTouchFeatureTest {
                 return Scheme.http;
             }
         }, System.getProperties().getProperty("spectra.hostname"), Integer.valueOf(System.getProperties().getProperty("spectra.port")), new Credentials(
-                System.getProperties().getProperty("spectra.user"), System.getProperties().getProperty("spectra.key")
+            System.getProperties().getProperty("spectra.user"), System.getProperties().getProperty("spectra.key")
         ));
         final SpectraSession session = new SpectraSession(host, new DisabledX509TrustManager(),
-                new DefaultX509KeyManager());
-        assertFalse(new SpectraTouchFeature(session).isSupported(new Path("/", EnumSet.of(Path.Type.volume))));
-        assertTrue(new SpectraTouchFeature(session).isSupported(new Path(new Path("/", EnumSet.of(Path.Type.volume)), "/container", EnumSet.of(Path.Type.volume))));
+            new DefaultX509KeyManager());
+        assertFalse(new SpectraTouchFeature(session).isSupported(new Path("/", EnumSet.of(Path.Type.volume)), StringUtils.EMPTY));
+        assertTrue(new SpectraTouchFeature(session).isSupported(new Path(new Path("/", EnumSet.of(Path.Type.volume)), "/container", EnumSet.of(Path.Type.volume)), StringUtils.EMPTY));
     }
 
     @Test
@@ -68,20 +68,20 @@ public class SpectraTouchFeatureTest {
                 return Scheme.http;
             }
         }, System.getProperties().getProperty("spectra.hostname"), Integer.valueOf(System.getProperties().getProperty("spectra.port")), new Credentials(
-                System.getProperties().getProperty("spectra.user"), System.getProperties().getProperty("spectra.key")
+            System.getProperties().getProperty("spectra.user"), System.getProperties().getProperty("spectra.key")
         ));
         final SpectraSession session = new SpectraSession(host, new DisabledX509TrustManager(),
-                new DefaultX509KeyManager());
+            new DefaultX509KeyManager());
         session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
         session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
         final Path container = new Path("cyberduck", EnumSet.of(Path.Type.volume));
         final Path test = new Path(container, UUID.randomUUID().toString() + ".txt", EnumSet.of(Path.Type.file));
         new SpectraTouchFeature(session).touch(test, new TransferStatus());
-        assertTrue(new S3FindFeature(session).find(test));
+        assertTrue(new SpectraFindFeature(session).find(test));
         final Map<String, String> metadata = new S3MetadataFeature(session, null).getMetadata(test);
         assertFalse(metadata.isEmpty());
         new SpectraDeleteFeature(session).delete(Collections.<Path>singletonList(test), new DisabledLoginCallback(), new Delete.DisabledCallback());
-        assertFalse(new S3FindFeature(session).find(test));
+        assertFalse(new SpectraFindFeature(session).find(test));
         session.close();
     }
 }

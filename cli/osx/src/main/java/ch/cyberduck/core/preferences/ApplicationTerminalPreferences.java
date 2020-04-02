@@ -16,11 +16,9 @@ package ch.cyberduck.core.preferences;
 
 import ch.cyberduck.cli.TerminalPreferences;
 import ch.cyberduck.core.IOKitSleepPreventer;
-import ch.cyberduck.core.Keychain;
+import ch.cyberduck.core.KeychainPasswordStore;
 import ch.cyberduck.core.diagnostics.SystemConfigurationReachability;
-import ch.cyberduck.core.editor.FSEventWatchEditorFactory;
 import ch.cyberduck.core.i18n.BundleRegexLocale;
-import ch.cyberduck.core.io.watchservice.FSEventWatchService;
 import ch.cyberduck.core.local.DisabledFilesystemBookmarkResolver;
 import ch.cyberduck.core.local.FileManagerWorkingDirectoryFinder;
 import ch.cyberduck.core.local.FinderLocal;
@@ -47,14 +45,14 @@ public class ApplicationTerminalPreferences extends TerminalPreferences {
         this.setDefault("factory.supportdirectoryfinder.class", SecurityApplicationGroupSupportDirectoryFinder.class.getName());
         this.setDefault("factory.localsupportdirectoryfinder.class", SecurityApplicationGroupSupportDirectoryFinder.class.getName());
         this.setDefault("factory.applicationresourcesfinder.class", BundleApplicationResourcesFinder.class.getName());
+        this.setDefault("factory.applicationloginregistry.class", SharedFileListApplicationLoginRegistry.class.getName());
         this.setDefault("factory.locale.class", BundleRegexLocale.class.getName());
-        this.setDefault("factory.editorfactory.class", FSEventWatchEditorFactory.class.getName());
         this.setDefault("factory.applicationlauncher.class", WorkspaceApplicationLauncher.class.getName());
         this.setDefault("factory.applicationfinder.class", LaunchServicesApplicationFinder.class.getName());
         this.setDefault("factory.local.class", FinderLocal.class.getName());
         this.setDefault("factory.autorelease.class", AutoreleaseActionOperationBatcher.class.getName());
-        this.setDefault("factory.passwordstore.class", Keychain.class.getName());
-        this.setDefault("factory.proxycredentialsstore.class", Keychain.class.getName());
+        this.setDefault("factory.passwordstore.class", KeychainPasswordStore.class.getName());
+        this.setDefault("factory.proxycredentialsstore.class", KeychainPasswordStore.class.getName());
         this.setDefault("factory.proxy.class", SystemConfigurationProxy.class.getName());
         this.setDefault("factory.sleeppreventer.class", IOKitSleepPreventer.class.getName());
         this.setDefault("factory.reachability.class", SystemConfigurationReachability.class.getName());
@@ -63,7 +61,6 @@ public class ApplicationTerminalPreferences extends TerminalPreferences {
         this.setDefault("factory.filedescriptor.class", LaunchServicesFileDescriptor.class.getName());
         this.setDefault("factory.workingdirectory.class", FileManagerWorkingDirectoryFinder.class.getName());
         this.setDefault("factory.symlink.class", WorkspaceSymlinkFeature.class.getName());
-        this.setDefault("factory.watchservice.class", FSEventWatchService.class.getName());
         this.setDefault("factory.bookmarkresolver.class", DisabledFilesystemBookmarkResolver.class.getName());
         this.setDefault("factory.browserlauncher.class", WorkspaceBrowserLauncher.class.getName());
     }

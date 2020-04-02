@@ -28,4 +28,20 @@ public class ResolveCanceledException extends ConnectionCanceledException {
     public ResolveCanceledException(final Throwable cause) {
         super(cause);
     }
+
+    public ResolveCanceledException(final String detail) {
+        super(detail);
+    }
+
+    public ResolveCanceledException(final String message, final String detail) {
+        super(message, detail);
+    }
+
+    public ResolveCanceledException(final String detail, final Throwable cause) {
+        super(detail, cause);
+    }
+
+    public ResolveCanceledException(final String message, final String detail, final Throwable cause) {
+        super(message, detail, cause);
+    }
 }

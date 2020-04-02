@@ -89,9 +89,23 @@ public class PathAttributes extends Attributes implements Serializable {
     private String versionId;
 
     /**
+     * References to previous versions if any
+     */
+    private AttributedList<Path> versions = AttributedList.emptyList();
+
+    /**
+     * Lock id
+     */
+    private String lockId;
+
+    /**
      * Should be hidden in the browser by default
      */
     private Boolean duplicate;
+    /**
+     * Hidden flag set on server
+     */
+    private Boolean hidden;
 
     /**
      * Revision number
@@ -108,7 +122,7 @@ public class PathAttributes extends Attributes implements Serializable {
      */
     private String displayname;
 
-    private DescriptiveUrl link;
+    private DescriptiveUrl link = DescriptiveUrl.EMPTY;
 
     /**
      * HTTP headers
@@ -151,7 +165,10 @@ public class PathAttributes extends Attributes implements Serializable {
         storageClass = copy.storageClass;
         encryption = copy.encryption;
         versionId = copy.versionId;
+        versions = copy.versions;
+        lockId = copy.lockId;
         duplicate = copy.duplicate;
+        hidden = copy.hidden;
         revision = copy.revision;
         region = copy.region;
         displayname = copy.displayname;
@@ -175,20 +192,38 @@ public class PathAttributes extends Attributes implements Serializable {
         if(revision != null) {
             dict.setStringForKey(String.valueOf(revision), "Revision");
         }
+        if(!versions.isEmpty()) {
+            dict.setListForKey(versions.toList(), "Versions");
+        }
+        if(etag != null) {
+            dict.setStringForKey(etag, "ETag");
+        }
         if(permission != Permission.EMPTY) {
             dict.setObjectForKey(permission, "Permission");
         }
         if(acl != Acl.EMPTY) {
             dict.setObjectForKey(acl, "Acl");
         }
+        if(link != DescriptiveUrl.EMPTY) {
+            dict.setStringForKey(link.getUrl(), "Link");
+        }
         if(checksum != Checksum.NONE) {
-            dict.setStringForKey(checksum.hash, "Checksum");
+            final Map<String, String> wrapper = new HashMap<>();
+            wrapper.put("Algorithm", checksum.algorithm.name());
+            wrapper.put("Hash", checksum.hash);
+            dict.setMapForKey(wrapper, "Checksum");
         }
         if(StringUtils.isNotBlank(versionId)) {
             dict.setStringForKey(versionId, "Version");
         }
+        if(StringUtils.isNotBlank(lockId)) {
+            dict.setStringForKey(lockId, "Lock Id");
+        }
         if(duplicate != null) {
             dict.setStringForKey(String.valueOf(duplicate), "Duplicate");
+        }
+        if(hidden != null) {
+            dict.setStringForKey(String.valueOf(hidden), "Hidden");
         }
         if(StringUtils.isNotBlank(region)) {
             dict.setStringForKey(region, "Region");
@@ -330,8 +365,7 @@ public class PathAttributes extends Attributes implements Serializable {
     }
 
     /**
-     * A version identifying a particular revision of a file
-     * with the same path.
+     * A version identifying a particular revision of a file with the same path.
      *
      * @return Version Identifier or null if not versioned.
      */
@@ -350,6 +384,23 @@ public class PathAttributes extends Attributes implements Serializable {
 
     public PathAttributes withVersionId(final String versionId) {
         this.setVersionId(versionId);
+        return this;
+    }
+
+    public AttributedList<Path> getVersions() {
+        return versions;
+    }
+
+    public void setVersions(final AttributedList<Path> versions) {
+        this.versions = versions;
+    }
+
+    public String getLockId() {
+        return lockId;
+    }
+
+    public PathAttributes setLockId(final String lockId) {
+        this.lockId = lockId;
         return this;
     }
 
@@ -403,8 +454,8 @@ public class PathAttributes extends Attributes implements Serializable {
     }
 
     /**
-     * If the path should not be displayed in a browser by default unless the user
-     * explicitly chooses to show hidden files.
+     * If the path should not be displayed in a browser by default unless the user explicitly chooses to show hidden
+     * files.
      *
      * @return True if hidden by default.
      */
@@ -419,6 +470,14 @@ public class PathAttributes extends Attributes implements Serializable {
      */
     public void setDuplicate(final boolean duplicate) {
         this.duplicate = duplicate;
+    }
+
+    public Boolean isHidden() {
+        return hidden != null && hidden;
+    }
+
+    public void setHidden(final boolean hidden) {
+        this.hidden = hidden;
     }
 
     public Map<String, String> getMetadata() {
@@ -488,10 +547,16 @@ public class PathAttributes extends Attributes implements Serializable {
         if(!Objects.equals(permission, that.permission)) {
             return false;
         }
+        if(!Objects.equals(acl, that.acl)) {
+            return false;
+        }
         if(!Objects.equals(versionId, that.versionId)) {
             return false;
         }
         if(!Objects.equals(revision, that.revision)) {
+            return false;
+        }
+        if(!Objects.equals(versions, that.versions)) {
             return false;
         }
         if(!Objects.equals(region, that.region)) {
@@ -505,9 +570,11 @@ public class PathAttributes extends Attributes implements Serializable {
         int result = (int) (size ^ (size >>> 32));
         result = 31 * result + (int) (modified ^ (modified >>> 32));
         result = 31 * result + (permission != null ? permission.hashCode() : 0);
+        result = 31 * result + (acl != null ? acl.hashCode() : 0);
         result = 31 * result + (checksum != null ? checksum.hashCode() : 0);
         result = 31 * result + (versionId != null ? versionId.hashCode() : 0);
         result = 31 * result + (revision != null ? revision.hashCode() : 0);
+        result = 31 * result + (versions != null ? versions.hashCode() : 0);
         result = 31 * result + (region != null ? region.hashCode() : 0);
         return result;
     }
@@ -528,8 +595,11 @@ public class PathAttributes extends Attributes implements Serializable {
         sb.append(", storageClass='").append(storageClass).append('\'');
         sb.append(", encryption='").append(encryption).append('\'');
         sb.append(", versionId='").append(versionId).append('\'');
+        sb.append(", lockId='").append(lockId).append('\'');
         sb.append(", duplicate=").append(duplicate);
+        sb.append(", hidden=").append(hidden);
         sb.append(", revision=").append(revision);
+        sb.append(", versions=").append(versions);
         sb.append(", region='").append(region).append('\'');
         sb.append(", metadata=").append(metadata);
         sb.append('}');

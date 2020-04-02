@@ -15,6 +15,7 @@ package ch.cyberduck.core.googledrive;
  * GNU General Public License for more details.
  */
 
+import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.DefaultIOExceptionMappingService;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.HostKeyCallback;
@@ -25,66 +26,73 @@ import ch.cyberduck.core.UrlProvider;
 import ch.cyberduck.core.UseragentProvider;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.features.*;
+import ch.cyberduck.core.http.DefaultHttpRateLimiter;
 import ch.cyberduck.core.http.HttpSession;
+import ch.cyberduck.core.http.RateLimitingHttpRequestInterceptor;
+import ch.cyberduck.core.http.UserAgentHttpRequestInitializer;
 import ch.cyberduck.core.oauth.OAuth2ErrorResponseInterceptor;
 import ch.cyberduck.core.oauth.OAuth2RequestInterceptor;
+import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.proxy.Proxy;
-import ch.cyberduck.core.ssl.ThreadLocalHostnameDelegatingTrustManager;
 import ch.cyberduck.core.ssl.X509KeyManager;
 import ch.cyberduck.core.ssl.X509TrustManager;
 import ch.cyberduck.core.threading.CancelCallback;
 
 import org.apache.http.client.HttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.log4j.Logger;
 
 import java.io.IOException;
 
-import com.google.api.client.http.HttpRequest;
-import com.google.api.client.http.HttpRequestInitializer;
-import com.google.api.client.http.apache.ApacheHttpTransport;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.gson.GsonFactory;
+import com.google.api.client.http.apache.v2.ApacheHttpTransport;
+import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.drive.Drive;
+import com.google.api.services.drive.model.About;
 
 public class DriveSession extends HttpSession<Drive> {
+    private static final Logger log = Logger.getLogger(DriveSession.class);
 
     private ApacheHttpTransport transport;
-
-    private final JsonFactory json = new GsonFactory();
-
-    private final UseragentProvider useragent
-        = new PreferencesUseragentProvider();
-
     private OAuth2RequestInterceptor authorizationService;
 
     private final DriveFileidProvider fileid = new DriveFileidProvider(this);
 
     public DriveSession(final Host host, final X509TrustManager trust, final X509KeyManager key) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(trust, host.getHostname()), key);
+        super(host, trust, key);
     }
 
     @Override
     protected Drive connect(final Proxy proxy, final HostKeyCallback callback, final LoginCallback prompt) {
-        authorizationService = new OAuth2RequestInterceptor(builder.build(proxy, this, prompt).build(), host.getProtocol())
-            .withRedirectUri(host.getProtocol().getOAuthRedirectUrl());
         final HttpClientBuilder configuration = builder.build(proxy, this, prompt);
+        authorizationService = new OAuth2RequestInterceptor(configuration.build(), host.getProtocol())
+            .withRedirectUri(host.getProtocol().getOAuthRedirectUrl());
         configuration.addInterceptorLast(authorizationService);
-        configuration.setServiceUnavailableRetryStrategy(new OAuth2ErrorResponseInterceptor(authorizationService));
+        configuration.setServiceUnavailableRetryStrategy(new OAuth2ErrorResponseInterceptor(host, authorizationService, prompt));
+        configuration.addInterceptorLast(new RateLimitingHttpRequestInterceptor(new DefaultHttpRateLimiter(
+            PreferencesFactory.get().getInteger("googledrive.limit.requests.second")
+        )));
         this.transport = new ApacheHttpTransport(configuration.build());
-        return new Drive.Builder(transport, json, new HttpRequestInitializer() {
-            @Override
-            public void initialize(HttpRequest request) {
-                request.setSuppressUserAgentSuffix(true);
-                // OAuth Bearer added in interceptor
-            }
-        })
-            .setApplicationName(useragent.get())
+        final UseragentProvider ua = new PreferencesUseragentProvider();
+        return new Drive.Builder(transport, new JacksonFactory(), new UserAgentHttpRequestInitializer(ua))
+            .setApplicationName(ua.get())
             .build();
     }
 
     @Override
     public void login(final Proxy proxy, final LoginCallback prompt, final CancelCallback cancel) throws BackgroundException {
         authorizationService.setTokens(authorizationService.authorize(host, prompt, cancel));
+        final About about;
+        try {
+            about = client.about().get().setFields("user").execute();
+        }
+        catch(IOException e) {
+            throw new DriveExceptionMappingService().map(e);
+        }
+        if(log.isDebugEnabled()) {
+            log.debug(String.format("Authenticated as user %s", about.getUser()));
+        }
+        final Credentials credentials = host.getCredentials();
+        credentials.setUsername(about.getUser().getEmailAddress());
     }
 
     @Override
@@ -134,6 +142,9 @@ public class DriveSession extends HttpSession<Drive> {
         if(type == UrlProvider.class) {
             return (T) new DriveUrlProvider();
         }
+        if(type == PromptUrlProvider.class) {
+            return (T) new DriveSharingUrlProvider(this, fileid);
+        }
         if(type == Home.class) {
             return (T) new DriveHomeFinderService(this);
         }
@@ -160,4 +171,5 @@ public class DriveSession extends HttpSession<Drive> {
         }
         return super._getFeature(type);
     }
+
 }

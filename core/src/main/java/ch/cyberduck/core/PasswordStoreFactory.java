@@ -25,12 +25,12 @@ public class PasswordStoreFactory extends Factory<HostPasswordStore> {
         super("factory.passwordstore.class");
     }
 
-    private static HostPasswordStore store;
-
     public static synchronized HostPasswordStore get() {
-        if(null == store) {
-            store = new PasswordStoreFactory().create();
+        try {
+            return new PasswordStoreFactory().create();
         }
-        return store;
+        catch(FactoryException e) {
+            return new DisabledPasswordStore();
+        }
     }
 }

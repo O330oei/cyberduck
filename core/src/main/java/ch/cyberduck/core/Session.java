@@ -27,6 +27,7 @@ import ch.cyberduck.core.features.Find;
 import ch.cyberduck.core.features.Home;
 import ch.cyberduck.core.features.IdProvider;
 import ch.cyberduck.core.features.Move;
+import ch.cyberduck.core.features.PromptUrlProvider;
 import ch.cyberduck.core.features.Quota;
 import ch.cyberduck.core.features.Read;
 import ch.cyberduck.core.features.Search;
@@ -59,7 +60,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public abstract class Session<C> implements TranscriptListener {
     private static final Logger log = Logger.getLogger(Session.class);
 
-    private static final LoggingTranscriptListener transcript = new LoggingTranscriptListener();
+    /**
+     * Append HTTP transcript to logger
+     */
+    private static final TranscriptListener transcript = new LoggingTranscriptListener();
 
     /**
      * Encapsulating all the information of the remote host
@@ -232,13 +236,8 @@ public abstract class Session<C> implements TranscriptListener {
     /**
      * @return Case sensitivity of the underlying remote file system
      */
-    public Case getCase() {
-        return Case.sensitive;
-    }
-
-    public enum Case {
-        sensitive,
-        insensitive
+    public Protocol.Case getCaseSensitivity() {
+        return host.getProtocol().getCaseSensitivity();
     }
 
 
@@ -321,6 +320,9 @@ public abstract class Session<C> implements TranscriptListener {
         if(type == UrlProvider.class) {
             return (T) new DefaultUrlProvider(host);
         }
+        if(type == PromptUrlProvider.class) {
+            return (T) new DefaulPrompttUrlProvider(this.getFeature(UrlProvider.class));
+        }
         if(type == Find.class) {
             return (T) new DefaultFindFeature(this);
         }
@@ -339,7 +341,7 @@ public abstract class Session<C> implements TranscriptListener {
         if(type == Quota.class) {
             return (T) new DisabledQuotaFeature();
         }
-        return null;
+        return host.getProtocol().getFeature(type);
     }
 
     @Override

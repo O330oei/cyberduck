@@ -18,7 +18,6 @@ package ch.cyberduck.core.sds;
 import ch.cyberduck.core.*;
 import ch.cyberduck.core.exception.ConnectionRefusedException;
 import ch.cyberduck.core.exception.ConnectionTimeoutException;
-import ch.cyberduck.core.exception.InteroperabilityException;
 import ch.cyberduck.core.exception.LoginCanceledException;
 import ch.cyberduck.core.exception.LoginFailureException;
 import ch.cyberduck.core.exception.ProxyLoginFailureException;
@@ -47,7 +46,7 @@ public class SDSSessionTest extends AbstractSDSTest {
 
     @Test
     public void testLoginUserPassword() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -58,22 +57,9 @@ public class SDSSessionTest extends AbstractSDSTest {
         assertFalse(new SDSListService(session, new SDSNodeIdProvider(session)).list(new Path("/", EnumSet.of(Path.Type.directory)), new DisabledListProgressListener()).isEmpty());
     }
 
-    @Test(expected = InteroperabilityException.class)
-    public void testLoginNotfound() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "heroes.dracoon.team", new Credentials(
-            System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
-        ));
-        final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
-        assertNotNull(session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback()));
-        assertTrue(session.isConnected());
-        assertNotNull(session.getClient());
-        session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
-        fail();
-    }
-
     @Test
     public void testLoginRefreshToken() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -86,7 +72,7 @@ public class SDSSessionTest extends AbstractSDSTest {
 
     @Test(expected = LoginFailureException.class)
     public void testLoginFailureInvalidUser() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -98,12 +84,13 @@ public class SDSSessionTest extends AbstractSDSTest {
         new SDSListService(session, new SDSNodeIdProvider(session)).list(new Path("/", EnumSet.of(Path.Type.directory)), new DisabledListProgressListener());
     }
 
+    @Ignore
     @Test(expected = ConnectionTimeoutException.class)
     public void testLoginRadius() throws Exception {
         final ProtocolFactory factory = new ProtocolFactory(new HashSet<>(Collections.singleton(new SDSProtocol())));
         final Profile profile = new ProfilePlistReader(factory).read(
             new Local("../profiles/DRACOON (Radius).cyberduckprofile"));
-        final Host host = new Host(profile, "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(profile, "duck.dracoon.com", new Credentials(
             "rsa.user1", "1234"
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -127,7 +114,7 @@ public class SDSSessionTest extends AbstractSDSTest {
         final ProtocolFactory factory = new ProtocolFactory(new HashSet<>(Collections.singleton(new SDSProtocol())));
         final Profile profile = new ProfilePlistReader(factory).read(
             new Local("../profiles/DRACOON (OAuth).cyberduckprofile"));
-        final Host host = new Host(profile, "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(profile, "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -140,7 +127,7 @@ public class SDSSessionTest extends AbstractSDSTest {
 
     @Test(expected = LoginFailureException.class)
     public void testLoginFailure() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             "a", "s"
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -152,7 +139,7 @@ public class SDSSessionTest extends AbstractSDSTest {
 
     @Test(expected = ConnectionRefusedException.class)
     public void testProxyNoConnect() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         ));
         final SDSSession session = new SDSSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -174,11 +161,11 @@ public class SDSSessionTest extends AbstractSDSTest {
     @Ignore
     @Test(expected = ProxyLoginFailureException.class)
     public void testConnectProxyInvalidCredentials() throws Exception {
-        final Host host = new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        final Host host = new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         ));
         final SDSSession session = new SDSSession(host, new DefaultX509TrustManager(),
-            new KeychainX509KeyManager(host, new DisabledCertificateStore())) {
+            new KeychainX509KeyManager(new DisabledCertificateIdentityCallback(), host, new DisabledCertificateStore())) {
         };
         final LoginConnectionService c = new LoginConnectionService(
             new DisabledLoginCallback() {

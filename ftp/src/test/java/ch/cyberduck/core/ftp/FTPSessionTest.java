@@ -99,6 +99,7 @@ public class FTPSessionTest extends AbstractFTPTest {
     }
 
     @Test
+    @Category(IntegrationTest.class)
     public void testConnectionTlsUpgrade() throws Exception {
         final Host host = new Host(new FTPProtocol(), "test.cyberduck.ch", new Credentials(
             System.getProperties().getProperty("ftp.user"), System.getProperties().getProperty("ftp.password")
@@ -168,15 +169,12 @@ public class FTPSessionTest extends AbstractFTPTest {
         ));
         final AtomicBoolean callback = new AtomicBoolean();
         final FTPSession session = new FTPSession(host, new DefaultX509TrustManager(),
-            new KeychainX509KeyManager(host, new DisabledCertificateStore() {
+            new KeychainX509KeyManager(new DisabledCertificateIdentityCallback(), host, new DisabledCertificateStore() {
                 @Override
-                public X509Certificate choose(String[] keyTypes, Principal[] issuers, Host bookmark, String prompt)
-                    throws ConnectionCanceledException {
+                public X509Certificate choose(final CertificateIdentityCallback prompt, final String[] keyTypes, final Principal[] issuers, final Host bookmark) throws ConnectionCanceledException {
                     assertEquals("test.cyberduck.ch", bookmark.getHostname());
-                    assertEquals("The server requires a certificate to validate your identity. Select the certificate to authenticate yourself to test.cyberduck.ch.",
-                        prompt);
                     callback.set(true);
-                    throw new ConnectionCanceledException(prompt);
+                    throw new ConnectionCanceledException();
                 }
             }));
         final LoginConnectionService c = new LoginConnectionService(

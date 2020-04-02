@@ -27,6 +27,9 @@ import ch.cyberduck.core.Session;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.ConnectionCanceledException;
 import ch.cyberduck.core.features.Metadata;
+import ch.cyberduck.core.transfer.TransferStatus;
+
+import org.apache.log4j.Logger;
 
 import java.text.MessageFormat;
 import java.util.HashMap;
@@ -35,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class WriteMetadataWorker extends Worker<Boolean> {
+    private static final Logger log = Logger.getLogger(WriteMetadataWorker.class);
 
     /**
      * Selected files.
@@ -50,7 +54,6 @@ public class WriteMetadataWorker extends Worker<Boolean> {
      * Descend into directories
      */
     private final RecursiveCallback<String> callback;
-
     private final ProgressListener listener;
 
     public WriteMetadataWorker(List<Path> files, final Map<String, String> metadata,
@@ -71,6 +74,9 @@ public class WriteMetadataWorker extends Worker<Boolean> {
     @Override
     public Boolean run(final Session<?> session) throws BackgroundException {
         final Metadata feature = session.getFeature(Metadata.class);
+        if(log.isDebugEnabled()) {
+            log.debug(String.format("Run with feature %s", feature));
+        }
         for(Path file : files) {
             if(this.isCanceled()) {
                 throw new ConnectionCanceledException();
@@ -78,6 +84,10 @@ public class WriteMetadataWorker extends Worker<Boolean> {
             this.write(session, feature, file);
         }
         return true;
+    }
+
+    protected String getLockId(final Path file) {
+        return null;
     }
 
     protected void write(final Session<?> session, final Metadata feature, final Path file) throws BackgroundException {
@@ -100,7 +110,7 @@ public class WriteMetadataWorker extends Worker<Boolean> {
         if(!update.equals(file.attributes().getMetadata())) {
             listener.message(MessageFormat.format(LocaleFactory.localizedString("Writing metadata of {0}", "Status"),
                 file.getName()));
-            feature.setMetadata(file, update);
+            feature.setMetadata(file, new TransferStatus().withMetadata(update).withLockId(this.getLockId(file)));
             file.attributes().setMetadata(metadata);
         }
         if(file.isDirectory()) {

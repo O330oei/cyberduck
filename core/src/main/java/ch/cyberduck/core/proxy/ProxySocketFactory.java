@@ -18,13 +18,10 @@ package ch.cyberduck.core.proxy;
  */
 
 import ch.cyberduck.core.Host;
-import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.socket.DefaultSocketConfigurator;
 import ch.cyberduck.core.socket.HttpProxySocketFactory;
-import ch.cyberduck.core.socket.NetworkInterfaceAwareSocketFactory;
 import ch.cyberduck.core.socket.SocketConfigurator;
-import ch.cyberduck.core.ssl.TrustManagerHostnameCallback;
 
 import org.apache.commons.net.DefaultSocketFactory;
 import org.apache.log4j.Logger;
@@ -43,41 +40,36 @@ public class ProxySocketFactory extends SocketFactory {
     private static final Logger log = Logger.getLogger(ProxySocketFactory.class);
 
     private final SocketConfigurator configurator;
-
     private final ProxyFinder proxyFinder;
-
-    private final Protocol protocol;
-
-    private final TrustManagerHostnameCallback hostnameCallback;
+    private final Host host;
 
     private final List<Proxy.Type> types = new ArrayList<Proxy.Type>(
-            Arrays.asList(Proxy.Type.DIRECT, Proxy.Type.SOCKS, Proxy.Type.HTTP, Proxy.Type.HTTPS));
+        Arrays.asList(Proxy.Type.DIRECT, Proxy.Type.SOCKS, Proxy.Type.HTTP, Proxy.Type.HTTPS));
 
     /**
      * List of ignored network interface names
      */
     private List<String> blacklisted
-            = PreferencesFactory.get().getList("network.interface.blacklist");
+        = PreferencesFactory.get().getList("network.interface.blacklist");
 
-    public ProxySocketFactory(final Protocol protocol, final TrustManagerHostnameCallback hostnameCallback) {
-        this(protocol, hostnameCallback, new DefaultSocketConfigurator());
+    public ProxySocketFactory(final Host host) {
+        this(host, new DefaultSocketConfigurator());
     }
 
-    public ProxySocketFactory(final Protocol protocol, final TrustManagerHostnameCallback hostnameCallback,
+    public ProxySocketFactory(final Host host,
                               final SocketConfigurator configurator) {
-        this(protocol, hostnameCallback, configurator, ProxyFactory.get());
+        this(host, configurator, ProxyFactory.get());
     }
 
-    public ProxySocketFactory(final Protocol protocol, final TrustManagerHostnameCallback hostnameCallback,
+    public ProxySocketFactory(final Host host,
                               final ProxyFinder proxyFinder) {
-        this(protocol, hostnameCallback, new DefaultSocketConfigurator(), proxyFinder);
+        this(host, new DefaultSocketConfigurator(), proxyFinder);
     }
 
-    public ProxySocketFactory(final Protocol protocol, final TrustManagerHostnameCallback hostnameCallback,
+    public ProxySocketFactory(final Host host,
                               final SocketConfigurator configurator,
                               final ProxyFinder proxyFinder) {
-        this.protocol = protocol;
-        this.hostnameCallback = hostnameCallback;
+        this.host = host;
         this.configurator = configurator;
         this.proxyFinder = proxyFinder;
     }
@@ -93,10 +85,10 @@ public class ProxySocketFactory extends SocketFactory {
      * direct connection socket factory.
      */
     protected SocketFactory factory(final String target) {
-        final Proxy proxy = proxyFinder.find(new Host(protocol, target));
+        final Proxy proxy = proxyFinder.find(host);
         if(!types.contains(proxy.getType())) {
             log.warn(String.format("Use of %s proxy is disabled for socket factory %s", proxy.getType(), this));
-            return new NetworkInterfaceAwareSocketFactory(new DefaultSocketFactory(), blacklisted);
+            return new DefaultSocketFactory();
         }
         switch(proxy.getType()) {
             case SOCKS:
@@ -104,40 +96,34 @@ public class ProxySocketFactory extends SocketFactory {
                     log.info(String.format("Configured to use SOCKS proxy %s", proxy));
                 }
                 final java.net.Proxy socksProxy = new java.net.Proxy(
-                        java.net.Proxy.Type.SOCKS, new InetSocketAddress(proxy.getHostname(), proxy.getPort()));
-                return new NetworkInterfaceAwareSocketFactory(new DefaultSocketFactory(), blacklisted, socksProxy);
+                    java.net.Proxy.Type.SOCKS, new InetSocketAddress(proxy.getHostname(), proxy.getPort()));
+                return new DefaultSocketFactory(socksProxy);
             case HTTP:
             case HTTPS:
                 if(log.isInfoEnabled()) {
                     log.info(String.format("Configured to use HTTP proxy %s", proxy));
                 }
                 final java.net.Proxy httpProxy = new java.net.Proxy(
-                        java.net.Proxy.Type.HTTP, new InetSocketAddress(proxy.getHostname(), proxy.getPort()));
-                return new NetworkInterfaceAwareSocketFactory(new HttpProxySocketFactory(httpProxy), blacklisted, httpProxy);
+                    java.net.Proxy.Type.HTTP, new InetSocketAddress(proxy.getHostname(), proxy.getPort()));
+                return new HttpProxySocketFactory(httpProxy);
         }
-        return new NetworkInterfaceAwareSocketFactory(new DefaultSocketFactory(), blacklisted);
+        return new DefaultSocketFactory();
     }
 
     @Override
     public Socket createSocket() throws IOException {
-        final String target = hostnameCallback.getTarget();
-        if(log.isInfoEnabled()) {
-            log.info(String.format("Use target hostname %s determined from callback %s for proxy configuration",
-                    target, hostnameCallback));
-        }
         try {
-            final Socket socket = this.factory(target).createSocket();
+            final Socket socket = this.factory(host.getHostname()).createSocket();
             configurator.configure(socket);
             return socket;
         }
         catch(IllegalArgumentException e) {
-            throw this.failure(target, e);
+            throw this.failure(host.getHostname(), e);
         }
     }
 
     private IOException failure(final String target, final IllegalArgumentException e) {
-        final Proxy proxy = proxyFinder.find(new Host(protocol, target));
-        return new ConnectException(String.format("Unsupported proxy type %s", proxy.getType()));
+        return new ConnectException(String.format("Unsupported proxy type for target %s", target));
     }
 
     @Override

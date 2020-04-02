@@ -29,7 +29,10 @@ import ch.cyberduck.core.http.HttpExceptionMappingService;
 import ch.cyberduck.core.shared.DefaultUrlProvider;
 import ch.cyberduck.core.transfer.TransferStatus;
 
+import org.apache.http.HttpHeaders;
+
 import java.io.IOException;
+import java.util.Collections;
 
 import com.github.sardine.impl.SardineException;
 
@@ -45,11 +48,13 @@ public class DAVMoveFeature implements Move {
     public Path move(final Path file, final Path renamed, final TransferStatus status, final Delete.Callback callback, final ConnectionCallback connectionCallback) throws BackgroundException {
         try {
             final String target = new DefaultUrlProvider(session.getHost()).toUrl(renamed).find(DescriptiveUrl.Type.provider).getUrl();
-            if(file.isDirectory()) {
-                session.getClient().move(new DAVPathEncoder().encode(file), String.format("%s/", target), true);
+            if(status.getLockId() != null) {
+                // Indicate that the client has knowledge of that state token
+                session.getClient().move(new DAVPathEncoder().encode(file), file.isDirectory() ? String.format("%s/", target) : target, true,
+                    Collections.singletonMap(HttpHeaders.IF, String.format("(<%s>)", status.getLockId())));
             }
             else {
-                session.getClient().move(new DAVPathEncoder().encode(file), target, true);
+                session.getClient().move(new DAVPathEncoder().encode(file), file.isDirectory() ? String.format("%s/", target) : target, true);
             }
             // Copy original file attributes
             return new Path(renamed.getParent(), renamed.getName(), renamed.getType(), new PathAttributes(file.attributes()));
@@ -67,8 +72,4 @@ public class DAVMoveFeature implements Move {
         return true;
     }
 
-    @Override
-    public Move withDelete(final Delete delete) {
-        return this;
-    }
 }

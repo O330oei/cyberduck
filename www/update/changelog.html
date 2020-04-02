@@ -14,15 +14,7 @@
         p.mountainduck {
             display: block;
             padding: 15px 10px 15px 50px;
-            background: #E5E5DB url(https://cdn.mountainduck.io/images/mountainduck_y_32.png) no-repeat 5px 5px;
-            border: 1px solid #cccccc;
-            color: black;
-        }
-
-        p.cryptomator {
-            display: block;
-            padding: 15px 10px 15px 50px;
-            background: rgba(100, 176, 0, 0.24) url(https://cdn.cyberduck.io/img/cryptomator_32.png) no-repeat 5px 5px;
+            background: #E5E5DB url(https://cdn.mountainduck.io/images/mountainduck_y_32.png) no-repeat 10px 10px;
             border: 1px solid #cccccc;
             color: black;
         }
@@ -55,106 +47,201 @@
             list-style-type: disc;
         }
 
-
     </style>
 </head>
 
 <body>
 
 <p class="mountainduck">
-    <strong><a href="https://mountainduck.io">Mountain Duck</a></strong>. Cyberduck for <strong>mounting
+    <strong><a target="_blank" href="https://mountainduck.io">Mountain Duck</a></strong>. Cyberduck for <strong>mounting
     volumes</strong> in the file
     explorer for Mac &amp; Windows.
 </p>
-<p class="cryptomator">
-    <strong><a href="https://cyberduck.io/cryptomator/">Cryptomator</a></strong>. Cyberduck <a
-    href="https://trac.cyberduck.io/milestone/6.0">6.0</a>
-    supports transparent <strong>client-side encryption</strong> using Cryptomator interoperable vaults.
-</p>
 
 <p>
-    <a href="https://trac.cyberduck.io/milestone/6.9.3"><strong>Version 6.9.3</strong></a>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.3.0"><strong>Version 7.3.0</strong></a>
 </p>
 <ul>
-    <li><span class="label label-warning">Bugfix</span> RFC compliant parsing of URI parameters (CLI)</li>
-    <li><span class="label label-warning">Bugfix</span> Failure displaying alert window for multiple consecutive
-        transfer failures
+    <li><span class="label label-success">Feature</span> Support for vault format version 7 (Cryptomator) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10825">#10825</a>)
     </li>
-    <li><span class="label label-warning">Bugfix</span> Does not read credentials from the standard AWS SDK credentials
-        file when connecting to AWS GovCloud or AWS China
+    <li><span class="label label-success">Feature</span> Labels for bookmarks (macOS) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/9719">#9719</a>)
     </li>
-    <li><span class="label label-warning">Bugfix</span> Checksum verification disabled by default for file transfers
+    <li><span class="label label-success">Feature</span> Group bookmarks by labels in menu (macOS)</li>
+    <li><span class="label label-success">Feature</span> Support TLS 1.3 (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10962">#10962</a>)
+    </li>
+    <li><span class="label label-success">Feature</span> Support for ap-east-1 (Hong Kong) region (S3)
+        (<a target="_blank" href="https://trac.cyberduck.io/ticket/10986">#10986</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Download fails for files with whitespace in name (Google
+        Storage) (<a
+            target="_blank" href="https://trac.cyberduck.io/ticket/10931">#10931</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Unable to access documents in Shared with me (Google Drive)</li>
+    <li><span class="label label-warning">Bugfix</span> Read timeout after copying large file (OpenStack Swift)</li>
+    <li><span class="label label-warning">Bugfix</span> Repeated prompt for authorization code (hubiC)</li>
+    <li><span class="label label-warning">Bugfix</span> Immediate retry for failure with cached upload channel
+        (Backblaze B2)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Set timestamp with X-OC-Mtime header (Nextcloud, ownCloud)</li>
+    <li><span class="label label-warning">Bugfix</span> Copy files to different bucket (Backblaze B2) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10924">#10924</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Allow downloading files marked as abusive (Google Drive) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10377">#10377</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Apply public read permissions to files selected to share (Google Drive)</li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.5"><strong>Version 7.2.5</strong></a>
+</p>
+<ul>
+    <li><span class="label label-success">Feature</span> Importer for bookmarks from Transmit 5 (macOS)</li>
+    <li><span class="label label-success">Feature</span> Importer for bookmarks from Cloudmounter (macOS)</li>
+    <li><span class="label label-warning">Bugfix</span> Copy files to different bucket (Backblaze B2) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10924">#10924</a>)
     </li>
 </ul>
 
 <p>
-    <a href="https://trac.cyberduck.io/milestone/6.9.2"><strong>Version 6.9.2</strong></a>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.5"><strong>Version 7.2.5</strong></a>
 </p>
 <ul>
-    <li><span class="label label-warning">Bugfix</span> Failure using RSA/ECDSA private in new OpenSSH format (<a
-        href="https://trac.cyberduck.io/ticket/10552">#10552</a>)
+    <li><span class="label label-warning">Bugfix</span> Error downloading files from Microsoft SharePoint (SharePoint
+        Server 2016)
     </li>
 </ul>
 
 <p>
-    <a href="https://trac.cyberduck.io/milestone/6.9.1"><strong>Version 6.9.1</strong></a>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.4"><strong>Version 7.2.4</strong></a>
 </p>
 <ul>
-    <li><span class="label label-warning">Bugfix</span> Fix code signature designated requirement issue (Mac App Store)
-    </li>
-</ul>
-<p>
-    <a href="https://trac.cyberduck.io/milestone/6.9.0"><strong>Version 6.9.0</strong></a>
-</p>
-<ul>
-    <li><span class="label label-success">Localize</span> Estonian Localization</li>
-    <li><span class="label label-success">Feature</span> Default connection profile for Microsoft Sharepoint Online (<a
-        href="https://trac.cyberduck.io/ticket/10115">#10115</a>)
-    </li>
-    <li><span class="label label-success">Feature</span> Support for eu-west-3 (Stockholm) region (S3)</li>
-    <li><span class="label label-success">Feature</span> Improve listing performance for versioned buckets (S3) (<a
-        href="https://trac.cyberduck.io/ticket/10426">#10426</a>)
-    </li>
-    <li><span class="label label-success">Feature</span> Add <tt>--profile</tt> option to select connection profile
-        (CLI)
-    </li>
-    <li><span class="label label-success">Feature</span> Add option to disable checksum verification for file transfers
-        (<a
-            href="https://trac.cyberduck.io/ticket/10215">#10215</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Stop button to interrupt transfer (<a
-        href="https://trac.cyberduck.io/ticket/10363">#10363</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Save passphrase for private key in keychain only after
-        successful connect (<a
-            href="https://trac.cyberduck.io/ticket/10526">#10526</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Failure authenticating with proxy using Integrated Windows
-        Authentication (IWA) authentication (WebDAV, Windows)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Failure authenticating with NTLM authentication (WebDAV,
-        Windows) (<a
-            href="https://trac.cyberduck.io/ticket/10556">#10556</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Failure to read attributes of common prefix (S3) (<a
-        href="https://trac.cyberduck.io/ticket/8724">#8724</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Asks for OAuth authentication code on every connect attempt
-        (Google Drive) (<a
-            href="https://trac.cyberduck.io/ticket/10555">#10555</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Transfers with many files to vault take a long time to finish
-        (Cryptomator) (<a
-            href="https://trac.cyberduck.io/ticket/10564">#10564</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Cannot list KMS keys when using IAM Cross Account Roles (S3) (<a
-        href="https://trac.cyberduck.io/ticket/10565">#10565</a>)
-    </li>
-    <li><span class="label label-warning">Bugfix</span> Updated localizations</li>
+    <li><span class="label label-warning">Bugfix</span> Certificate trust validation error (Google Drive, macOS)</li>
 </ul>
 
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.3"><strong>Version 7.2.3</strong></a>
+</p>
+<ul>
+    <li><span class="label label-warning">Bugfix</span> Cannot open link to documents in Google Docs (Google Drive)</li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.2"><strong>Version 7.2.2</strong></a>
+</p>
+<ul>
+    <li><span class="label label-warning">Bugfix</span> Crash opening connection (macOS 10.[9-11]) (
+        <a target="_blank" href="https://trac.cyberduck.io/ticket/10892">#10892</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Interoperability with providers only supporting path-style
+        requests (S3) (<a target="_blank" href="https://trac.cyberduck.io/ticket/10888">#10888</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Display certificates as sheet in browser window (macOS) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10897">#10897</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Recursive search shows no result (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10799">#10799</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Error moving file to encrypted vault (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10803">#10803</a>)
+    </li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.1"><strong>Version 7.2.1</strong></a>
+</p>
+<ul>
+    <li><span class="label label-warning">Bugfix</span> Failure to open application on Windows 7+ (Windows)</li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.2.0"><strong>Version 7.2.0</strong></a>
+</p>
+<ul>
+    <li><span class="label label-warning">Bugfix</span> Failure validating hostname when connecting through HTTP proxy
+    </li>
+    <li><span class="label label-warning">Bugfix</span> MD5 mismatch error for uploads (Alibaba Cloud Object Storage
+        Service) (<a target="_blank" href="https://trac.cyberduck.io/ticket/10879">#10879</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Deprecated path-style request usage for (AWS GovCloud) (#10824)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Default to use virtual hosted style to access bucket contents
+        for third party S3 providers
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Optimize MD5 checksum calculation (S3) (<a target="_blank"
+                                                                                                   href="https://trac.cyberduck.io/ticket/10278">#10278</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Reload directory contents after editing file</li>
+    <li><span class="label label-warning">Bugfix</span> Failure replacing objects with blob type set to block (Azure)
+    </li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.1.2"><strong>Version 7.1.2</strong></a>
+</p>
+<ul>
+    <li><span class="label label-warning">Bugfix</span> Folder showing no more than 1000 files (S3) (
+        <a target="_blank" href="https://trac.cyberduck.io/ticket/10811">#10811</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Failure deleting folder recursively (FTP)</li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.1.1"><strong>Version 7.1.1</strong></a>
+</p>
+<ul>
+    <li><span class="label label-warning">Bugfix</span> Failure authenticating using SSH agent (SFTP) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10800">#10800</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Failure overwriting existing file (Google Storage)</li>
+    <li><span class="label label-warning">Bugfix</span> Missing hostname verification in TLS handshake when connecting
+        through HTTP proxy
+    </li>
+</ul>
+
+<p>
+    <a target="_blank" href="https://trac.cyberduck.io/milestone/7.1.0"><strong>Version 7.1.0</strong></a>
+</p>
+<ul>
+    <li><span class="label label-success">Feature</span> Application running as 64-bit (Windows)</li>
+    <li><span class="label label-success">Feature</span> Application package is notarized (macOS)</li>
+    <li><span class="label label-success">Feature</span> Support for storage classes (Google Storage)</li>
+    <li><span class="label label-success">Feature</span> Support to select region (eu, us, asia) for new buckets (Google
+        Storage)
+    </li>
+    <li><span class="label label-success">Feature</span> Support to set lifecycle configuration on bucket (Google
+        Storage)
+    </li>
+    <li><span class="label label-success">Feature</span> Support for me-south-1 (Bahrain) region (S3)</li>
+    <li><span class="label label-warning">Bugfix</span> Number of buckets displayed in browser limited to 1000 (Google
+        Storage)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Fails to authenticate where keyboard-interactive mechanism is
+        not supported (SFTP) (<a target="_blank" href="https://trac.cyberduck.io/ticket/10714">#10714</a>)
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Errors accessing Cryptomator vault (Google Drive, OneDrive)</li>
+    <li><span class="label label-warning">Bugfix</span> No route to host error with IPv6 only server (macOS)</li>
+    <li><span class="label label-warning">Bugfix</span> Allow to access files with non printable characters in key name
+        (S3))
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Use AWS4 signature for pre-signed URLs for AWS in region
+        us-east-1 (S3))
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Rate limit number of requests (Google Drive) (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10103">#10103</a>))
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Repeated prompt to validate host key when connecting to non
+        standard port (SFTP) (<a target="_blank" href="https://trac.cyberduck.io/ticket/10772">10772</a>))
+    </li>
+    <li><span class="label label-warning">Bugfix</span> Segmented downloads fail with longer filenames (<a
+        target="_blank" href="https://trac.cyberduck.io/ticket/10726">#10726</a>))
+    </li>
+</ul>
 
 <p>Release notes for previous versions can be found at <a
-    href="https://cyberduck.io/changelog">cyberduck.io/changelog</a>.</p>
+    target="_blank" href="https://cyberduck.io/changelog">cyberduck.io/changelog</a>.</p>
 </body>
 </html>

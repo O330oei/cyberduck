@@ -18,22 +18,12 @@ package ch.cyberduck.core.preferences;
  *  dkocher@cyberduck.ch
  */
 
-import ch.cyberduck.core.DefaultProviderHelpService;
-import ch.cyberduck.core.DisabledCertificateStore;
-import ch.cyberduck.core.DisabledHostKeyCallback;
-import ch.cyberduck.core.DisabledLocale;
-import ch.cyberduck.core.DisabledLoginCallback;
-import ch.cyberduck.core.DisabledPasswordCallback;
-import ch.cyberduck.core.DisabledPasswordStore;
-import ch.cyberduck.core.DisabledSleepPreventer;
-import ch.cyberduck.core.DisabledTerminalService;
-import ch.cyberduck.core.Host;
-import ch.cyberduck.core.Local;
-import ch.cyberduck.core.PreferencesProxyCredentialsStore;
-import ch.cyberduck.core.Scheme;
+import ch.cyberduck.core.*;
 import ch.cyberduck.core.aquaticprime.DonationKeyFactory;
 import ch.cyberduck.core.date.DefaultUserDateFormatter;
 import ch.cyberduck.core.diagnostics.DefaultInetAddressReachability;
+import ch.cyberduck.core.editor.DefaultEditorFactory;
+import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.formatter.DecimalSizeFormatter;
 import ch.cyberduck.core.i18n.Locales;
 import ch.cyberduck.core.io.watchservice.NIOEventWatchService;
@@ -69,9 +59,11 @@ import ch.cyberduck.core.transfer.Transfer;
 import ch.cyberduck.core.transfer.TransferAction;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.core.updater.DisabledPeriodicUpdater;
+import ch.cyberduck.core.updater.DisabledUpdateCheckerArguments;
 import ch.cyberduck.core.urlhandler.DisabledSchemeHandler;
 import ch.cyberduck.core.vault.DisabledVault;
 import ch.cyberduck.core.webloc.InternetShortcutFileWriter;
+import ch.cyberduck.ui.quicklook.ApplicationLauncherQuicklook;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Level;
@@ -82,7 +74,10 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.security.Security;
 import java.util.Arrays;
 import java.util.Collections;
@@ -97,36 +92,13 @@ import java.util.TimeZone;
 import com.google.common.collect.ImmutableMap;
 
 /**
- * Holding all application preferences. Default values get overwritten when loading
- * the <code>PREFERENCES_FILE</code>.
+ * Holding all application preferences. Default values get overwritten when loading the <code>PREFERENCES_FILE</code>.
  * Singleton class.
  */
 public abstract class Preferences implements Locales {
     private static final Logger log = Logger.getLogger(Preferences.class);
 
     protected static final String LIST_SEPERATOR = StringUtils.SPACE;
-
-    /**
-     * Called after the defaults have been set.
-     */
-    protected void post() {
-        // Ticket #2539
-        if(this.getBoolean("connection.dns.ipv6")) {
-            System.setProperty("java.net.preferIPv6Addresses", String.valueOf(true));
-        }
-        // TTL for DNS queries
-        Security.setProperty("networkaddress.cache.ttl", "10");
-        Security.setProperty("networkaddress.cache.negative.ttl", "5");
-        // Register bouncy castle as preferred provider. Used in Cyptomator, SSL and SSH
-        final int position = this.getInteger("connection.ssl.provider.bouncycastle.position");
-        final BouncyCastleProvider provider = new BouncyCastleProvider();
-        // Add missing factory. http://bouncy-castle.1462172.n4.nabble.com/Keychain-issue-as-of-version-1-53-follow-up-tc4659509.html
-        provider.put("Alg.Alias.SecretKeyFactory.PBE", "PBEWITHSHAAND3-KEYTRIPLEDES-CBC");
-        if(log.isInfoEnabled()) {
-            log.info(String.format("Install provider %s at position %d", provider, position));
-        }
-        Security.insertProviderAt(provider, position);
-    }
 
     /**
      * Update the given property with a string value.
@@ -239,10 +211,29 @@ public abstract class Preferences implements Locales {
         }
     }
 
+    protected void setDefaults(final Local defaults) {
+        if(defaults.exists()) {
+            final Properties props = new Properties();
+            try (final InputStream in = defaults.getInputStream()) {
+                props.load(in);
+            }
+            catch(AccessDeniedException | IOException e) {
+                // Ignore failure loading configuration
+            }
+            for(Map.Entry<Object, Object> entry : props.entrySet()) {
+                this.setDefault(entry.getKey().toString(), entry.getValue().toString());
+            }
+        }
+    }
+
     /**
      * setting the default prefs values
      */
     protected void setDefaults() {
+        // TTL for DNS queries
+        Security.setProperty("networkaddress.cache.ttl", "10");
+        Security.setProperty("networkaddress.cache.negative.ttl", "5");
+
         this.setDefault("application.version", Version.getSpecification());
         this.setDefault("application.revision", Version.getImplementation());
 
@@ -272,6 +263,7 @@ public abstract class Preferences implements Locales {
         this.setDefault("website.cli", "https://duck.sh/");
         this.setDefault("website.license", "https://cyberduck.io/license");
         this.setDefault("website.acknowledgments", "https://cyberduck.io/acknowledgments");
+        this.setDefault("website.privacypolicy", "https://cyberduck.io/privacy/");
 
         this.setDefault("rendezvous.enable", String.valueOf(true));
         this.setDefault("rendezvous.loopback.suppress", String.valueOf(true));
@@ -295,13 +287,20 @@ public abstract class Preferences implements Locales {
         this.setDefault("local.delimiter", File.separator);
         this.setDefault("local.temporaryfiles.shortening.threshold", String.valueOf(240));
 
+        this.setDefault("application.identifier", "io.cyberduck");
         this.setDefault("application.name", "Cyberduck");
         this.setDefault("application.container.name", "duck");
+        this.setDefault("application.container.teamidentifier", "G69SCX94XU");
+        this.setDefault("application.datafolder.name", "duck");
 
         /*
           Lowercase folder name to use when looking for bookmarks in user support directory
          */
         this.setDefault("bookmarks.folder.name", "Bookmarks");
+        /*
+         * Register file watcher in bookmark folders
+         */
+        this.setDefault("bookmarks.folder.monitor", String.valueOf(true));
         /*
           Lowercase folder name to use when looking for profiles in user support directory
          */
@@ -369,7 +368,7 @@ public abstract class Preferences implements Locales {
           Show hidden files in browser by default
          */
         this.setDefault("browser.showHidden", String.valueOf(false));
-        this.setDefault("browser.charset.encoding", "UTF-8");
+        this.setDefault("browser.charset.encoding", StandardCharsets.UTF_8.name());
         /*
           Edit double clicked files instead of downloading
          */
@@ -515,9 +514,9 @@ public abstract class Preferences implements Locales {
         this.setDefault("queue.download.wherefrom", String.valueOf(true));
 
         // Segmented concurrent downloads
-        this.setDefault("queue.download.segments", String.valueOf(false));
-        this.setDefault("queue.download.segments.threshold", String.valueOf(100L * 1024L * 1024L));
-        this.setDefault("queue.download.segments.size", String.valueOf(50L * 1024L * 1024L));
+        this.setDefault("queue.download.segments", String.valueOf(true));
+        this.setDefault("queue.download.segments.threshold", String.valueOf(10L * 1024L * 1024L));
+        this.setDefault("queue.download.segments.size", String.valueOf(5L * 1024L * 1024L));
 
         /*
           Open completed downloads
@@ -602,6 +601,7 @@ public abstract class Preferences implements Locales {
          */
         this.setDefault("http.connections.route", String.valueOf(10));
         this.setDefault("http.connections.reuse", String.valueOf(true));
+        this.setDefault("http.connections.stale.check.ms", String.valueOf(5000));
         /*
           Total number of connections in the pool
          */
@@ -611,6 +611,7 @@ public abstract class Preferences implements Locales {
         this.setDefault("http.manager.timeout", String.valueOf(0)); // Infinite
         this.setDefault("http.socket.buffer", String.valueOf(8192));
         this.setDefault("http.credentials.charset", "ISO-8859-1");
+        this.setDefault("http.request.uri.normalize", String.valueOf(false));
 
         /*
           Enable or disable verification that the remote host taking part
@@ -706,6 +707,12 @@ public abstract class Preferences implements Locales {
 
         this.setDefault("s3.accelerate.prompt", String.valueOf(false));
 
+        this.setDefault("s3.versioning.enable", String.valueOf(true));
+        /**
+         * Reference previous versions in file attributes
+         */
+        this.setDefault("s3.versioning.references.enable", String.valueOf(false));
+
         /*
           A prefix to apply to log file names
          */
@@ -713,8 +720,23 @@ public abstract class Preferences implements Locales {
         this.setDefault("google.logging.prefix", "log");
         this.setDefault("cloudfront.logging.prefix", "logs/");
 
+        this.setDefault("googlestorage.listing.chunksize", String.valueOf(1000));
+        this.setDefault("googlestorage.metadata.default", StringUtils.EMPTY);
+        this.setDefault("googlestorage.storage.class", "multi_regional");
+
+
         this.setDefault("onedrive.listing.chunksize", String.valueOf(1000));
+        /*
+         * The size of each byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment size that does not
+         * divide evenly by 320 KiB will result in errors committing some files.
+         */
         this.setDefault("onedrive.upload.multipart.partsize.minimum", String.valueOf(320 * 1024));
+        /*
+         * A byte range size of 10 MiB for stable high speed connections is optimal.
+         * For slower or less reliable connections you may get better results from a smaller fragment size.
+         * The recommended fragment size is between 5-10 MiB.
+         */
+        this.setDefault("onedrive.upload.multipart.partsize.factor", String.valueOf(20)); // ~6,25 MB
 
         final int month = 60 * 60 * 24 * 30; //30 days in seconds
         this.setDefault("s3.cache.seconds", String.valueOf(month));
@@ -732,6 +754,8 @@ public abstract class Preferences implements Locales {
         this.setDefault("azure.metadata.default", StringUtils.EMPTY);
         this.setDefault("azure.listing.chunksize", String.valueOf(1000));
         this.setDefault("azure.upload.md5", String.valueOf(false));
+        this.setDefault("azure.upload.snapshot", String.valueOf(false));
+        this.setDefault("azure.upload.blobtype", "APPEND_BLOB");
 
         // Legacy authentication
 //        this.setDefault("openstack.authentication.context", "/v1.0");
@@ -760,6 +784,8 @@ public abstract class Preferences implements Locales {
         this.setDefault("googledrive.list.limit", String.valueOf(1000));
         this.setDefault("googledrive.teamdrive.enable", String.valueOf(true));
         this.setDefault("googledrive.delete.trash", String.valueOf(true));
+        // Limit the number of requests to 10 per second which is equal the user quota
+        this.setDefault("googledrive.limit.requests.second", String.valueOf(100));
 
         this.setDefault("b2.bucket.acl.default", "allPrivate");
         this.setDefault("b2.listing.chunksize", String.valueOf(1000));
@@ -776,16 +802,31 @@ public abstract class Preferences implements Locales {
 
         this.setDefault("b2.metadata.default", StringUtils.EMPTY);
 
+        this.setDefault("sds.version.lts", "4.12");
         this.setDefault("sds.listing.chunksize", String.valueOf(500));
-        this.setDefault("sds.upload.multipart.chunksize", String.valueOf(0.5 * 1024L * 1024L));
+        this.setDefault("sds.upload.multipart.chunksize", String.valueOf(2 * 1024L * 1024L));
         // Run missing file keys in bulk feature after upload
         this.setDefault("sds.encryption.missingkeys.upload", String.valueOf(true));
         this.setDefault("sds.encryption.missingkeys.scheduler.period", String.valueOf(120000)); // 2 minutes
         this.setDefault("sds.encryption.keys.ttl", String.valueOf(3600000)); // 1 hour
         this.setDefault("sds.useracount.ttl", String.valueOf(3600000)); // 1 hour
         this.setDefault("sds.delete.dataroom.enable", String.valueOf(true));
+        this.setDefault("sds.upload.sharelinks.keep", String.valueOf(true));
+        this.setDefault("sds.versioning.references.enable", String.valueOf(false));
 
         this.setDefault("spectra.retry.delay", String.valueOf(60)); // 1 minute
+
+        this.setDefault("storegate.listing.chunksize", String.valueOf(500));
+        this.setDefault("storegate.upload.multipart.chunksize", String.valueOf(0.5 * 1024L * 1024L));
+        this.setDefault("storegate.lock.ttl", String.valueOf(24 * 3600000)); // 24 hours
+
+        this.setDefault("oauth.browser.open.warn", String.valueOf(false));
+
+        this.setDefault("brick.pairing.nickname.configure", String.valueOf(false));
+        this.setDefault("brick.pairing.hostname.configure", String.valueOf(true));
+        this.setDefault("brick.pairing.interval.ms", String.valueOf(1000L));
+
+        this.setDefault("dropbox.upload.chunksize", String.valueOf(150 * 1024L * 1024L));
 
         /*
           NTLM Windows Domain
@@ -813,6 +854,10 @@ public abstract class Preferences implements Locales {
         this.setDefault("webdav.redirect.PROPFIND.follow", String.valueOf(true));
 
         this.setDefault("webdav.metadata.default", StringUtils.EMPTY);
+
+        this.setDefault("webdav.microsoftiis.header.translate", String.valueOf(true));
+
+        this.setDefault("webdav.list.handler.sax", String.valueOf(true));
 
         this.setDefault("analytics.provider.qloudstat.setup", "https://qloudstat.com/configuration/add");
         this.setDefault("analytics.provider.qloudstat.iam.policy",
@@ -902,10 +947,15 @@ public abstract class Preferences implements Locales {
           Retry to connect after a I/O failure automatically
          */
         this.setDefault("connection.retry", String.valueOf(1));
+        // Specific setting for transfer worker
+        this.setDefault("transfer.connection.retry", String.valueOf(1));
+        this.setDefault("connection.retry.max", String.valueOf(20));
         /*
           In seconds
          */
         this.setDefault("connection.retry.delay", String.valueOf(0));
+        // Specific setting for transfer worker
+        this.setDefault("transfer.connection.retry.delay", String.valueOf(0));
         this.setDefault("connection.retry.backoff.enable", String.valueOf(false));
 
         /**
@@ -923,6 +973,10 @@ public abstract class Preferences implements Locales {
           java.net.preferIPv6Addresses
          */
         this.setDefault("connection.dns.ipv6", String.valueOf(false));
+        // Ticket #2539
+        if(this.getBoolean("connection.dns.ipv6")) {
+            System.setProperty("java.net.preferIPv6Addresses", String.valueOf(true));
+        }
 
         /*
           Read proxy settings from system preferences
@@ -941,7 +995,22 @@ public abstract class Preferences implements Locales {
         this.setDefault(String.format("connection.unsecure.warning.%s", Scheme.http), String.valueOf(true));
 
         this.setDefault("connection.ssl.provider.bouncycastle.position", String.valueOf(1));
-        this.setDefault("connection.ssl.protocols", "TLSv1.2,TLSv1.1,TLSv1");
+        // Failure loading default key store with bouncycastle provider
+        System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+        if(System.getProperty("java.version").matches("13\\..*")) {
+            // Workaround for https://github.com/bcgit/bc-java/issues/589
+            System.setProperty("jdk.tls.namedGroups", "secp256r1, secp384r1, ffdhe2048, ffdhe3072");
+        }
+        // Register bouncy castle as preferred provider. Used in Cyptomator, SSL and SSH
+        final int position = this.getInteger("connection.ssl.provider.bouncycastle.position");
+        final BouncyCastleProvider provider = new BouncyCastleProvider();
+        // Add missing factory. http://bouncy-castle.1462172.n4.nabble.com/Keychain-issue-as-of-version-1-53-follow-up-tc4659509.html
+        provider.put("Alg.Alias.SecretKeyFactory.PBE", "PBEWITHSHAAND3-KEYTRIPLEDES-CBC");
+        if(log.isInfoEnabled()) {
+            log.info(String.format("Install provider %s at position %d", provider, position));
+        }
+        Security.insertProviderAt(provider, position);
+        this.setDefault("connection.ssl.protocols", "TLSv1.3,TLSv1.2,TLSv1.1,TLSv1");
         this.setDefault("connection.ssl.cipher.blacklist", StringUtils.EMPTY);
 
         this.setDefault("connection.ssl.x509.revocation.online", String.valueOf(false));
@@ -981,7 +1050,7 @@ public abstract class Preferences implements Locales {
           Default to large icon size
          */
         this.setDefault("bookmark.icon.size", String.valueOf(64));
-        this.setDefault("bookmark.menu.icon.size", String.valueOf(16));
+        this.setDefault("bookmark.menu.icon.size", String.valueOf(64));
 
         /*
           Location of the openssh known_hosts file
@@ -1034,6 +1103,10 @@ public abstract class Preferences implements Locales {
         this.setDefault("archive.command.expand.gz", "gzip -d {0}");
         this.setDefault("archive.command.expand.bz2", "bzip2 -dk {0}");
 
+        this.setDefault("update.feed", "release");
+        this.setDefault("update.feed.nightly.enable", String.valueOf(true));
+        this.setDefault("update.feed.beta.enable", String.valueOf(true));
+
         this.setDefault("update.check", String.valueOf(true));
         final int day = 60 * 60 * 24;
         this.setDefault("update.check.interval", String.valueOf(day)); // periodic update check in seconds
@@ -1050,34 +1123,40 @@ public abstract class Preferences implements Locales {
         this.setDefault("threading.pool.keepalive.seconds", String.valueOf(60L));
 
         this.setDefault("cryptomator.enable", String.valueOf(true));
+        this.setDefault("cryptomator.vault.version", String.valueOf(6));
         this.setDefault("cryptomator.vault.autodetect", String.valueOf(true));
     }
 
     protected void setLogging() {
+        this.setLogging(this.getProperty("logging"));
+    }
+
+    /**
+     * Reconfigure logging configuration
+     *
+     * @param level Log level
+     */
+    public void setLogging(final String level) {
+        this.setProperty("logging", level);
         // Call only once during initialization time of your application
         SLF4JBridgeHandler.removeHandlersForRootLogger();
         SLF4JBridgeHandler.install();
-
+        // Apply default configuration
         final URL configuration;
         final String file = this.getDefault("logging.config");
         if(null == file) {
-            configuration = Preferences.class.getClassLoader().getResource("log4j-default.xml");
+            configuration = Preferences.class.getClassLoader().getResource("log4j.xml");
         }
         else {
             configuration = Preferences.class.getClassLoader().getResource(file);
         }
+        LogManager.resetConfiguration();
         final Logger root = Logger.getRootLogger();
         if(null != configuration) {
             DOMConfigurator.configure(configuration);
         }
-        else {
-            // Default if no logging configuration is found
-            root.setLevel(Level.ERROR);
-        }
-        if(StringUtils.isNotBlank(this.getProperty("logging"))) {
-            // Allow to override default logging level
-            root.setLevel(Level.toLevel(this.getProperty("logging"), Level.ERROR));
-        }
+        // Allow to override default logging level
+        root.setLevel(Level.toLevel(level, Level.ERROR));
         // Map logging level to pass through bridge
         final ImmutableMap<Level, java.util.logging.Level> map = new ImmutableMap.Builder<Level, java.util.logging.Level>()
             .put(Level.ALL, java.util.logging.Level.ALL)
@@ -1233,6 +1312,8 @@ public abstract class Preferences implements Locales {
         this.setDefault("factory.certificatestore.class", DisabledCertificateStore.class.getName());
         this.setDefault("factory.logincallback.class", DisabledLoginCallback.class.getName());
         this.setDefault("factory.passwordcallback.class", DisabledPasswordCallback.class.getName());
+        this.setDefault("factory.certificatetrustcallback.class", DisabledCertificateTrustCallback.class.getName());
+        this.setDefault("factory.certificateidentitycallback.class", DisabledCertificateIdentityCallback.class.getName());
         this.setDefault("factory.alertcallback.class", DisabledAlertCallback.class.getName());
         this.setDefault("factory.hostkeycallback.class", DisabledHostKeyCallback.class.getName());
         this.setDefault("factory.transfererrorcallback.class", DisabledTransferErrorCallback.class.getName());
@@ -1251,6 +1332,7 @@ public abstract class Preferences implements Locales {
         this.setDefault("factory.supportdirectoryfinder.class", TemporarySupportDirectoryFinder.class.getName());
         this.setDefault("factory.localsupportdirectoryfinder.class", TemporarySupportDirectoryFinder.class.getName());
         this.setDefault("factory.applicationresourcesfinder.class", TemporaryApplicationResourcesFinder.class.getName());
+        this.setDefault("factory.applicationloginregistry.class", DisabledApplicationLoginRegistry.class.getName());
         this.setDefault("factory.workingdirectory.class", DefaultWorkingDirectoryFinder.class.getName());
         this.setDefault("factory.bookmarkresolver.class", DisabledFilesystemBookmarkResolver.class.getName());
         this.setDefault("factory.watchservice.class", NIOEventWatchService.class.getName());
@@ -1269,11 +1351,14 @@ public abstract class Preferences implements Locales {
         this.setDefault("factory.browserlauncher.class", DisabledBrowserLauncher.class.getName());
         this.setDefault("factory.reachability.class", DefaultInetAddressReachability.class.getName());
         this.setDefault("factory.updater.class", DisabledPeriodicUpdater.class.getName());
+        this.setDefault("factory.updater.arguments.class", DisabledUpdateCheckerArguments.class.getName());
         this.setDefault("factory.threadpool.class", DefaultThreadPool.class.getName());
         this.setDefault("factory.urlfilewriter.class", InternetShortcutFileWriter.class.getName());
         this.setDefault("factory.vault.class", DisabledVault.class.getName());
         this.setDefault("factory.securerandom.class", DefaultSecureRandomProvider.class.getName());
         this.setDefault("factory.providerhelpservice.class", DefaultProviderHelpService.class.getName());
+        this.setDefault("factory.editorfactory.class", DefaultEditorFactory.class.getName());
+        this.setDefault("factory.quicklook.class", ApplicationLauncherQuicklook.class.getName());
     }
 
     /**
@@ -1287,16 +1372,14 @@ public abstract class Preferences implements Locales {
     public abstract void load();
 
     /**
-     * @return The preferred locale of all localizations available
-     * in this application bundle
+     * @return The preferred locale of all localizations available in this application bundle
      */
     public String locale() {
         return this.applicationLocales().iterator().next();
     }
 
     /**
-     * The localizations available in this application bundle
-     * sorted by preference by the user.
+     * The localizations available in this application bundle sorted by preference by the user.
      *
      * @return Available locales in application bundle
      */

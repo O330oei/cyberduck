@@ -15,12 +15,28 @@ package ch.cyberduck.core.cryptomator;
  * GNU General Public License for more details.
  */
 
-import ch.cyberduck.core.*;
+import ch.cyberduck.core.Credentials;
+import ch.cyberduck.core.DescriptiveUrl;
+import ch.cyberduck.core.Host;
+import ch.cyberduck.core.ListService;
+import ch.cyberduck.core.LocaleFactory;
+import ch.cyberduck.core.LoginOptions;
+import ch.cyberduck.core.PasswordCallback;
+import ch.cyberduck.core.PasswordStore;
+import ch.cyberduck.core.Path;
+import ch.cyberduck.core.PathAttributes;
+import ch.cyberduck.core.Permission;
+import ch.cyberduck.core.Session;
+import ch.cyberduck.core.SimplePathPredicate;
+import ch.cyberduck.core.UrlProvider;
 import ch.cyberduck.core.cryptomator.features.*;
-import ch.cyberduck.core.cryptomator.impl.CryptoDirectoryProvider;
-import ch.cyberduck.core.cryptomator.impl.CryptoFilenameProvider;
+import ch.cyberduck.core.cryptomator.impl.CryptoDirectoryV6Provider;
+import ch.cyberduck.core.cryptomator.impl.CryptoDirectoryV7Provider;
+import ch.cyberduck.core.cryptomator.impl.CryptoFilenameV6Provider;
+import ch.cyberduck.core.cryptomator.impl.CryptoFilenameV7Provider;
 import ch.cyberduck.core.cryptomator.random.FastSecureRandomProvider;
 import ch.cyberduck.core.exception.BackgroundException;
+import ch.cyberduck.core.exception.LocalAccessDeniedException;
 import ch.cyberduck.core.exception.LoginCanceledException;
 import ch.cyberduck.core.features.*;
 import ch.cyberduck.core.preferences.Preferences;
@@ -38,9 +54,10 @@ import org.cryptomator.cryptolib.Cryptors;
 import org.cryptomator.cryptolib.api.AuthenticationFailedException;
 import org.cryptomator.cryptolib.api.Cryptor;
 import org.cryptomator.cryptolib.api.CryptorProvider;
+import org.cryptomator.cryptolib.api.FileContentCryptor;
+import org.cryptomator.cryptolib.api.FileHeaderCryptor;
 import org.cryptomator.cryptolib.api.InvalidPassphraseException;
 import org.cryptomator.cryptolib.api.KeyFile;
-import org.cryptomator.cryptolib.v1.Version1CryptorModule;
 
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
@@ -49,6 +66,7 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.common.io.BaseEncoding;
 import com.google.gson.JsonParseException;
 
 /**
@@ -57,24 +75,29 @@ import com.google.gson.JsonParseException;
 public class CryptoVault implements Vault {
     private static final Logger log = Logger.getLogger(CryptoVault.class);
 
+    public static final int VAULT_VERSION_DEPRECATED = 6;
+    public static final int VAULT_VERSION = PreferencesFactory.get().getInteger("cryptomator.vault.version");
+
     public static final String DIR_PREFIX = "0";
 
-    private static final int VAULT_VERSION = 6;
-
     private static final Pattern BASE32_PATTERN = Pattern.compile("^0?(([A-Z2-7]{8})*[A-Z2-7=]{8})");
+    private static final Pattern BASE64URL_PATTERN = Pattern.compile("^([A-Za-z0-9_=-]+).c9r");
 
     /**
      * Root of vault directory
      */
     private final Path home;
     private final Path masterkey;
+    private final Path vault;
+    private int vaultVersion;
 
     private final Preferences preferences = PreferencesFactory.get();
 
     private Cryptor cryptor;
+    private CryptorCache fileNameCryptor;
 
-    private final CryptoFilenameProvider filenameProvider;
-    private final CryptoDirectoryProvider directoryProvider;
+    private CryptoFilename filenameProvider;
+    private CryptoDirectory directoryProvider;
 
     private final byte[] pepper;
 
@@ -91,25 +114,25 @@ public class CryptoVault implements Vault {
         this.masterkey = new Path(home, masterkey, EnumSet.of(Path.Type.file, Path.Type.vault));
         this.pepper = pepper;
         // New vault home with vault flag set for internal use
-        final EnumSet<AbstractPath.Type> type = EnumSet.copyOf(home.getType());
+        final EnumSet<Path.Type> type = EnumSet.copyOf(home.getType());
         type.add(Path.Type.vault);
-        final Path vault = new Path(home.getAbsolute(), type, new PathAttributes(home.attributes()));
-        this.filenameProvider = new CryptoFilenameProvider(vault);
-        this.directoryProvider = new CryptoDirectoryProvider(vault, this);
+        vault = new Path(home.getAbsolute(), type, new PathAttributes(home.attributes()));
     }
 
-    @Override
-    public synchronized Path create(final Session<?> session, final String region, final VaultCredentials credentials, final PasswordStore keychain) throws BackgroundException {
-        final CryptorProvider provider = new Version1CryptorModule().provideCryptorProvider(
-            FastSecureRandomProvider.get().provide()
-        );
+    public synchronized Path create(final Session<?> session, final String region, final VaultCredentials credentials, final PasswordStore keychain, final int version) throws BackgroundException {
+        final CryptorProvider provider = Cryptors.version1(FastSecureRandomProvider.get().provide());
         final Host bookmark = session.getHost();
         if(credentials.isSaved()) {
-            keychain.addPassword(String.format("Cryptomator Passphrase (%s)", bookmark.getCredentials().getUsername()),
-                new DefaultUrlProvider(bookmark).toUrl(masterkey).find(DescriptiveUrl.Type.provider).getUrl(), credentials.getPassword());
+            try {
+                keychain.addPassword(String.format("Cryptomator Passphrase (%s)", bookmark.getCredentials().getUsername()),
+                    new DefaultUrlProvider(bookmark).toUrl(masterkey).find(DescriptiveUrl.Type.provider).getUrl(), credentials.getPassword());
+            }
+            catch(LocalAccessDeniedException e) {
+                log.error(String.format("Failure %s saving credentials for %s in password store", e, bookmark));
+            }
         }
         final String passphrase = credentials.getPassword();
-        final KeyFile masterKeyFileContent = provider.createNew().writeKeysToMasterkeyFile(passphrase, pepper, VAULT_VERSION);
+        final KeyFile masterKeyFileContent = provider.createNew().writeKeysToMasterkeyFile(passphrase, pepper, version);
         if(log.isDebugEnabled()) {
             log.debug(String.format("Write master key to %s", masterkey));
         }
@@ -133,10 +156,15 @@ public class CryptoVault implements Vault {
         if(log.isDebugEnabled()) {
             log.debug(String.format("Create vault root directory at %s", secondLevel));
         }
-        directory.mkdir(dataDir, region, new TransferStatus());
-        directory.mkdir(firstLevel, region, new TransferStatus());
-        directory.mkdir(secondLevel, region, new TransferStatus());
+        directory.mkdir(dataDir, region, status);
+        directory.mkdir(firstLevel, region, status);
+        directory.mkdir(secondLevel, region, status);
         return vault;
+    }
+
+    @Override
+    public synchronized Path create(final Session<?> session, final String region, final VaultCredentials credentials, final PasswordStore keychain) throws BackgroundException {
+        return this.create(session, region, credentials, keychain, VAULT_VERSION);
     }
 
     @Override
@@ -150,7 +178,7 @@ public class CryptoVault implements Vault {
         }
         final String json = new ContentReader(session).read(masterkey);
         if(log.isDebugEnabled()) {
-            log.debug(String.format("Read master key %s", json));
+            log.debug(String.format("Read master key %s", masterkey));
         }
         final KeyFile masterKeyFileContent;
         try {
@@ -174,14 +202,13 @@ public class CryptoVault implements Vault {
     }
 
     private void unlock(final Session<?> session, final Path masterKeyFile, final KeyFile masterKeyFileContent,
-                        String passphrase, final Host bookmark, final PasswordCallback prompt, final String message, final PasswordStore keychain) throws BackgroundException {
+                        final String passphrase, final Host bookmark, final PasswordCallback prompt, final String message, final PasswordStore keychain) throws BackgroundException {
         final Credentials credentials;
         if(null == passphrase) {
             credentials = prompt.prompt(
                 bookmark, LocaleFactory.localizedString("Unlock Vault", "Cryptomator"),
                 message,
                 new LoginOptions()
-                    .save(preferences.getBoolean("vault.keychain"))
                     .user(false)
                     .anonymous(false)
                     .icon("cryptomator.tiff")
@@ -231,60 +258,72 @@ public class CryptoVault implements Vault {
             }
         }
         cryptor = null;
+        fileNameCryptor = null;
     }
 
     private KeyFile upgrade(final Session<?> session, final KeyFile keyFile, final CharSequence passphrase) throws BackgroundException {
-        switch(keyFile.getVersion()) {
-            case VAULT_VERSION:
-                return keyFile;
-            case 5:
-                log.warn(String.format("Upgrade vault version %d to %d", keyFile.getVersion(), VAULT_VERSION));
-                try {
-                    final CryptorProvider provider = new Version1CryptorModule().provideCryptorProvider(
-                        FastSecureRandomProvider.get().provide()
-                    );
-                    final Cryptor cryptor = provider.createFromKeyFile(keyFile, passphrase, pepper, keyFile.getVersion());
-                    // Create backup, as soon as we know the password was correct
-                    final Path masterKeyFileBackup = new Path(home, DefaultVaultRegistry.DEFAULT_BACKUPKEY_FILE_NAME, EnumSet.of(Path.Type.file, Path.Type.vault));
-                    new ContentWriter(session).write(masterKeyFileBackup, keyFile.serialize());
-                    if(log.isInfoEnabled()) {
-                        log.info(String.format("Master key backup saved in %s", masterKeyFileBackup));
-                    }
-                    // Write updated masterkey file
-                    final KeyFile upgradedMasterKeyFile = cryptor.writeKeysToMasterkeyFile(passphrase, pepper, VAULT_VERSION);
-                    final Path masterKeyFile = new Path(home, DefaultVaultRegistry.DEFAULT_MASTERKEY_FILE_NAME, EnumSet.of(Path.Type.file, Path.Type.vault));
-                    final byte[] masterKeyFileContent = upgradedMasterKeyFile.serialize();
-                    new ContentWriter(session).write(masterKeyFile, masterKeyFileContent, new TransferStatus().exists(true).length(masterKeyFileContent.length));
-                    log.warn(String.format("Updated masterkey %s to version %d", masterKeyFile, VAULT_VERSION));
-                    return KeyFile.parse(upgradedMasterKeyFile.serialize());
-                }
-                catch(IllegalArgumentException e) {
-                    throw new VaultException("Failure reading key file", e);
-                }
-                catch(InvalidPassphraseException e) {
-                    throw new CryptoAuthenticationException("Failure to decrypt master key file", e);
-                }
-            default:
-                log.error(String.format("Unsupported vault version %d", keyFile.getVersion()));
-                return keyFile;
+        int version = keyFile.getVersion();
+        if(version == VAULT_VERSION || version == VAULT_VERSION_DEPRECATED) {
+            return keyFile;
         }
+        else if(version == 5) {
+            log.warn(String.format("Upgrade vault version %d to %d", keyFile.getVersion(), VAULT_VERSION));
+            try {
+                final CryptorProvider provider = Cryptors.version1(FastSecureRandomProvider.get().provide());
+                final Cryptor cryptor = provider.createFromKeyFile(keyFile, passphrase, pepper, keyFile.getVersion());
+                // Create backup, as soon as we know the password was correct
+                final Path masterKeyFileBackup = new Path(home, DefaultVaultRegistry.DEFAULT_BACKUPKEY_FILE_NAME, EnumSet.of(Path.Type.file, Path.Type.vault));
+                new ContentWriter(session).write(masterKeyFileBackup, keyFile.serialize());
+                if(log.isInfoEnabled()) {
+                    log.info(String.format("Master key backup saved in %s", masterKeyFileBackup));
+                }
+                // Write updated masterkey file
+                final KeyFile upgradedMasterKeyFile = cryptor.writeKeysToMasterkeyFile(passphrase, pepper, VAULT_VERSION_DEPRECATED);
+                final Path masterKeyFile = new Path(home, DefaultVaultRegistry.DEFAULT_MASTERKEY_FILE_NAME, EnumSet.of(Path.Type.file, Path.Type.vault));
+                final byte[] masterKeyFileContent = upgradedMasterKeyFile.serialize();
+                new ContentWriter(session).write(masterKeyFile, masterKeyFileContent, new TransferStatus().exists(true).length(masterKeyFileContent.length));
+                log.warn(String.format("Updated masterkey %s to version %d", masterKeyFile, VAULT_VERSION_DEPRECATED));
+                return KeyFile.parse(upgradedMasterKeyFile.serialize());
+            }
+            catch(IllegalArgumentException e) {
+                throw new VaultException("Failure reading key file", e);
+            }
+            catch(InvalidPassphraseException e) {
+                throw new CryptoAuthenticationException("Failure to decrypt master key file", e);
+            }
+        }
+        log.error(String.format("Unsupported vault version %d", keyFile.getVersion()));
+        return keyFile;
     }
 
     private void open(final KeyFile keyFile, final CharSequence passphrase) throws VaultException, CryptoAuthenticationException {
-        final CryptorProvider provider = new Version1CryptorModule().provideCryptorProvider(
-            FastSecureRandomProvider.get().provide()
-        );
+        final CryptorProvider provider = Cryptors.version1(FastSecureRandomProvider.get().provide());
+        vaultVersion = keyFile.getVersion();
         if(log.isDebugEnabled()) {
             log.debug(String.format("Initialized crypto provider %s", provider));
         }
         try {
-            cryptor = provider.createFromKeyFile(keyFile, new NFCNormalizer().normalize(passphrase), pepper, VAULT_VERSION);
+            cryptor = provider.createFromKeyFile(keyFile, new NFCNormalizer().normalize(passphrase), pepper, keyFile.getVersion());
+            fileNameCryptor = new CryptorCache(cryptor.fileNameCryptor());
         }
         catch(IllegalArgumentException e) {
             throw new VaultException("Failure reading key file", e);
         }
         catch(InvalidPassphraseException e) {
             throw new CryptoAuthenticationException("Failure to decrypt master key file", e);
+        }
+        this.initProviders();
+    }
+
+    private void initProviders() {
+        switch(vaultVersion) {
+            case VAULT_VERSION_DEPRECATED:
+                this.filenameProvider = new CryptoFilenameV6Provider(vault);
+                this.directoryProvider = new CryptoDirectoryV6Provider(vault, this);
+                break;
+            default:
+                this.filenameProvider = new CryptoFilenameV7Provider();
+                this.directoryProvider = new CryptoDirectoryV7Provider(vault, this);
         }
     }
 
@@ -345,10 +384,12 @@ public class CryptoVault implements Vault {
             }
             // Translate file size
             attributes.setSize(this.toCiphertextSize(file.attributes().getSize()));
-            final EnumSet<AbstractPath.Type> type = EnumSet.copyOf(file.getType());
-            type.remove(Path.Type.directory);
+            final EnumSet<Path.Type> type = EnumSet.copyOf(file.getType());
+            if(metadata && vaultVersion == VAULT_VERSION_DEPRECATED) {
+                type.remove(Path.Type.directory);
+                type.add(Path.Type.file);
+            }
             type.remove(Path.Type.decrypted);
-            type.add(Path.Type.file);
             type.add(Path.Type.encrypted);
             encrypted = new Path(parent, filename, type, attributes);
         }
@@ -381,14 +422,16 @@ public class CryptoVault implements Vault {
             return file;
         }
         final Path inflated = this.inflate(session, file);
-        final Matcher m = BASE32_PATTERN.matcher(inflated.getName());
-        if(m.find()) {
+        final Pattern pattern = vaultVersion == VAULT_VERSION_DEPRECATED ? BASE32_PATTERN : BASE64URL_PATTERN;
+        final Matcher m = pattern.matcher(inflated.getName());
+        if(m.matches()) {
             final String ciphertext = m.group(1);
             try {
-                final String cleartextFilename = cryptor.fileNameCryptor().decryptFilename(
+                final String cleartextFilename = fileNameCryptor.decryptFilename(
+                    vaultVersion == VAULT_VERSION_DEPRECATED ? BaseEncoding.base32() : BaseEncoding.base64Url(),
                     ciphertext, file.getParent().attributes().getDirectoryId().getBytes(StandardCharsets.UTF_8));
                 final PathAttributes attributes = new PathAttributes(file.attributes());
-                if(inflated.getName().startsWith(DIR_PREFIX)) {
+                if(this.isDirectory(inflated)) {
                     final Permission permission = attributes.getPermission();
                     permission.setUser(permission.getUser().or(Permission.Action.execute));
                     permission.setGroup(permission.getGroup().or(Permission.Action.execute));
@@ -405,12 +448,16 @@ public class CryptoVault implements Vault {
                 attributes.setEncrypted(file);
                 // Add reference for vault
                 attributes.setVault(home);
-                final EnumSet<AbstractPath.Type> type = EnumSet.copyOf(file.getType());
-                type.remove(inflated.getName().startsWith(DIR_PREFIX) ? Path.Type.file : Path.Type.directory);
-                type.add(inflated.getName().startsWith(DIR_PREFIX) ? Path.Type.directory : Path.Type.file);
+                final EnumSet<Path.Type> type = EnumSet.copyOf(file.getType());
+                type.remove(this.isDirectory(inflated) ? Path.Type.file : Path.Type.directory);
+                type.add(this.isDirectory(inflated) ? Path.Type.directory : Path.Type.file);
                 type.remove(Path.Type.encrypted);
                 type.add(Path.Type.decrypted);
-                return new Path(file.getParent().attributes().getDecrypted(), cleartextFilename, type, attributes);
+                final Path decrypted = new Path(file.getParent().attributes().getDecrypted(), cleartextFilename, type, attributes);
+                if(type.contains(Path.Type.symboliclink)) {
+                    decrypted.setSymlinkTarget(file.getSymlinkTarget());
+                }
+                return decrypted;
             }
             catch(AuthenticationFailedException e) {
                 throw new CryptoAuthenticationException(
@@ -419,8 +466,15 @@ public class CryptoVault implements Vault {
         }
         else {
             throw new CryptoFilenameMismatchException(
-                String.format("Failure to decrypt due to missing pattern match for %s", BASE32_PATTERN));
+                String.format("Failure to decrypt %s due to missing pattern match for %s", inflated.getName(), pattern));
         }
+    }
+
+    private boolean isDirectory(final Path p) {
+        if(vaultVersion == VAULT_VERSION_DEPRECATED) {
+            return p.getName().startsWith(DIR_PREFIX);
+        }
+        return p.isDirectory();
     }
 
     @Override
@@ -465,19 +519,23 @@ public class CryptoVault implements Vault {
         return masterkey;
     }
 
-    public byte[] getPepper() {
-        return pepper;
+    public FileHeaderCryptor getFileHeaderCryptor() {
+        return cryptor.fileHeaderCryptor();
     }
 
-    public Cryptor getCryptor() {
-        return cryptor;
+    public FileContentCryptor getFileContentCryptor() {
+        return cryptor.fileContentCryptor();
     }
 
-    public CryptoFilenameProvider getFilenameProvider() {
+    public CryptorCache getFileNameCryptor() {
+        return fileNameCryptor;
+    }
+
+    public CryptoFilename getFilenameProvider() {
         return filenameProvider;
     }
 
-    public CryptoDirectoryProvider getDirectoryProvider() {
+    public CryptoDirectory getDirectoryProvider() {
         return directoryProvider;
     }
 
@@ -498,7 +556,9 @@ public class CryptoVault implements Vault {
                 return (T) new CryptoTouchFeature(session, new DefaultTouchFeature(session._getFeature(Upload.class), session._getFeature(AttributesFinder.class)), session._getFeature(Write.class), this);
             }
             if(type == Directory.class) {
-                return (T) new CryptoDirectoryFeature(session, (Directory) delegate, session._getFeature(Write.class), this);
+                return (T) (vaultVersion == VAULT_VERSION_DEPRECATED ?
+                    new CryptoDirectoryV6Feature(session, (Directory) delegate, session._getFeature(Write.class), this) :
+                    new CryptoDirectoryV7Feature(session, (Directory) delegate, session._getFeature(Write.class), this));
             }
             if(type == Upload.class) {
                 return (T) new CryptoUploadFeature(session, (Upload) delegate, session._getFeature(Write.class), this);
@@ -516,7 +576,10 @@ public class CryptoVault implements Vault {
                 return (T) new CryptoMultipartWriteFeature(session, (Write) delegate, this);
             }
             if(type == Move.class) {
-                return (T) new CryptoMoveFeature(session, (Move) delegate, session._getFeature(Delete.class), this);
+                return (T) (vaultVersion == VAULT_VERSION_DEPRECATED ?
+                    new CryptoMoveV6Feature(session, (Move) delegate, this) :
+                    new CryptoMoveV7Feature(session, (Move) delegate, this));
+
             }
             if(type == AttributesFinder.class) {
                 return (T) new CryptoAttributesFeature(session, (AttributesFinder) delegate, this);
@@ -531,7 +594,9 @@ public class CryptoVault implements Vault {
                 return (T) new CryptoIdProvider(session, (IdProvider) delegate, this);
             }
             if(type == Delete.class) {
-                return (T) new CryptoDeleteFeature(session, (Delete) delegate, this);
+                return (T) (vaultVersion == VAULT_VERSION_DEPRECATED ?
+                    new CryptoDeleteV6Feature(session, (Delete) delegate, this) :
+                    new CryptoDeleteV7Feature(session, (Delete) delegate, this));
             }
             if(type == Symlink.class) {
                 return (T) new CryptoSymlinkFeature(session, (Symlink) delegate, this);

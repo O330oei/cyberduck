@@ -55,23 +55,13 @@ import ch.cyberduck.core.bonjour.RendezvousFactory;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.HostParserException;
-import ch.cyberduck.core.importer.CrossFtpBookmarkCollection;
-import ch.cyberduck.core.importer.Expandrive3BookmarkCollection;
-import ch.cyberduck.core.importer.Expandrive4BookmarkCollection;
-import ch.cyberduck.core.importer.Expandrive5BookmarkCollection;
-import ch.cyberduck.core.importer.Expandrive6BookmarkCollection;
-import ch.cyberduck.core.importer.FetchBookmarkCollection;
-import ch.cyberduck.core.importer.FilezillaBookmarkCollection;
-import ch.cyberduck.core.importer.FireFtpBookmarkCollection;
-import ch.cyberduck.core.importer.FlowBookmarkCollection;
-import ch.cyberduck.core.importer.InterarchyBookmarkCollection;
-import ch.cyberduck.core.importer.ThirdpartyBookmarkCollection;
-import ch.cyberduck.core.importer.Transmit4BookmarkCollection;
+import ch.cyberduck.core.importer.*;
 import ch.cyberduck.core.local.Application;
 import ch.cyberduck.core.local.BrowserLauncherFactory;
 import ch.cyberduck.core.local.DefaultLocalDirectoryFeature;
 import ch.cyberduck.core.local.TemporaryFileServiceFactory;
 import ch.cyberduck.core.notification.NotificationServiceFactory;
+import ch.cyberduck.core.oauth.OAuth2AuthorizationService;
 import ch.cyberduck.core.oauth.OAuth2TokenListenerRegistry;
 import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.preferences.Preferences;
@@ -98,6 +88,8 @@ import ch.cyberduck.ui.cocoa.delegate.OpenURLMenuDelegate;
 import ch.cyberduck.ui.cocoa.delegate.URLMenuDelegate;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.log4j.Logger;
 import org.rococoa.Foundation;
 import org.rococoa.ID;
@@ -107,6 +99,8 @@ import org.rococoa.cocoa.foundation.NSInteger;
 import org.rococoa.cocoa.foundation.NSRect;
 import org.rococoa.cocoa.foundation.NSUInteger;
 
+import java.net.URI;
+import java.nio.charset.Charset;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -128,20 +122,17 @@ public class MainController extends BundleController implements NSApplication.De
     private static final Logger log = Logger.getLogger(MainController.class);
 
     /**
-     * Apple event constants<br>
-     * **********************************************************************************************<br>
+     * Apple event constants<br> **********************************************************************************************<br>
      * <i>native declaration : /Developer/SDKs/MacOSX10.5.sdk/usr/include/AvailabilityMacros.h:117</i>
      */
     public static final int kInternetEventClass = 1196773964;
     /**
-     * Apple event constants<br>
-     * **********************************************************************************************<br>
+     * Apple event constants<br> **********************************************************************************************<br>
      * <i>native declaration : /Developer/SDKs/MacOSX10.5.sdk/usr/include/AvailabilityMacros.h:118</i>
      */
     public static final int kAEGetURL = 1196773964;
     /**
-     * Apple event constants<br>
-     * **********************************************************************************************<br>
+     * Apple event constants<br> **********************************************************************************************<br>
      * <i>native declaration : /Developer/SDKs/MacOSX10.5.sdk/usr/include/AvailabilityMacros.h:119</i>
      */
     public static final int kAEFetchURL = 1179996748;
@@ -164,7 +155,7 @@ public class MainController extends BundleController implements NSApplication.De
     /**
      * Saved browsers
      */
-    private final AbstractHostCollection sessions = new FolderBookmarkCollection(
+    private final AbstractHostCollection sessions = new BookmarkCollection(
         LocalFactory.get(SupportDirectoryFinderFactory.get().find(), "Sessions"), "session");
 
     private final NSWorkspace workspace = NSWorkspace.sharedWorkspace();
@@ -210,7 +201,7 @@ public class MainController extends BundleController implements NSApplication.De
         final List<BrowserController> browsers = getBrowsers();
         if(!force) {
             for(BrowserController controller : browsers) {
-                if(SessionPool.DISCONNECTED == controller.getSession()) {
+                if(controller.isIdle()) {
                     controller.window().makeKeyAndOrderFront(null);
                     return controller;
                 }
@@ -391,7 +382,7 @@ public class MainController extends BundleController implements NSApplication.De
                 final List<BrowserController> b = MainController.getBrowsers();
                 for(BrowserController controller : b) {
                     if(controller.window().isKeyWindow()) {
-                        List<Path> selected = controller.getSelectedPaths();
+                        final List<Path> selected = controller.getSelectedPaths();
                         if(selected.isEmpty()) {
                             if(controller.isMounted()) {
                                 return Collections.singletonList(controller.workdir());
@@ -427,7 +418,7 @@ public class MainController extends BundleController implements NSApplication.De
                 final List<BrowserController> b = MainController.getBrowsers();
                 for(BrowserController controller : b) {
                     if(controller.window().isKeyWindow()) {
-                        List<Path> selected = controller.getSelectedPaths();
+                        final List<Path> selected = controller.getSelectedPaths();
                         if(selected.isEmpty()) {
                             if(controller.isMounted()) {
                                 return Collections.singletonList(controller.workdir());
@@ -539,7 +530,7 @@ public class MainController extends BundleController implements NSApplication.De
             log.info("No default bookmark configured");
             return; //No default bookmark given
         }
-        final Host bookmark = FolderBookmarkCollection.favoritesCollection().lookup(defaultBookmark);
+        final Host bookmark = BookmarkCollection.defaultCollection().lookup(defaultBookmark);
         if(null == bookmark) {
             log.info("Default bookmark no more available");
             return;
@@ -659,7 +650,7 @@ public class MainController extends BundleController implements NSApplication.De
                     }
                 }
                 catch(AccessDeniedException e) {
-                    log.error(String.format("Failure reading profile from %s. %s", f, e.getMessage()));
+                    log.error(String.format("Failure reading profile from %s. %s", f, e));
                     return false;
                 }
             }
@@ -709,7 +700,7 @@ public class MainController extends BundleController implements NSApplication.De
                 break;
             }
         }
-        final FolderBookmarkCollection bookmarks = FolderBookmarkCollection.favoritesCollection();
+        final BookmarkCollection bookmarks = BookmarkCollection.defaultCollection();
         if(bookmarks.isEmpty()) {
             log.warn("No bookmark for upload");
             return false;
@@ -779,23 +770,18 @@ public class MainController extends BundleController implements NSApplication.De
             public void callback(int returncode) {
                 if(DEFAULT_OPTION == returncode) {
                     final String selected = bookmarksPopup.selectedItem().representedObject();
-                    for(Host bookmark : bookmarks) {
-                        // Determine selected bookmark
-                        if(bookmark.getUuid().equals(selected)) {
-                            if(bookmark.equals(mount)) {
-                                // Use current working directory of browser for destination
-                                upload(bookmark, files, destination);
-                            }
-                            else {
-                                // No mounted browser
-                                if(StringUtils.isNotBlank(bookmark.getDefaultPath())) {
-                                    upload(bookmark, files, new Path(PathNormalizer.normalize(bookmark.getDefaultPath()), EnumSet.of(Path.Type.directory)));
-                                }
-                                else {
-                                    upload(bookmark, files, destination);
-                                }
-                            }
-                            break;
+                    final Host bookmark = bookmarks.lookup(selected);
+                    if(bookmark.equals(mount)) {
+                        // Use current working directory of browser for destination
+                        upload(bookmark, files, destination);
+                    }
+                    else {
+                        // No mounted browser
+                        if(StringUtils.isNotBlank(bookmark.getDefaultPath())) {
+                            upload(bookmark, files, new Path(PathNormalizer.normalize(bookmark.getDefaultPath()), EnumSet.of(Path.Type.directory)));
+                        }
+                        else {
+                            upload(bookmark, files, destination);
                         }
                     }
                 }
@@ -821,10 +807,9 @@ public class MainController extends BundleController implements NSApplication.De
     }
 
     /**
-     * Sent directly by theApplication to the delegate. The method should attempt to open the file filename,
-     * returning true if the file is successfully opened, and false otherwise. By design, a
-     * file opened through this method is assumed to be temporary its the application's
-     * responsibility to remove the file at the appropriate time.
+     * Sent directly by theApplication to the delegate. The method should attempt to open the file filename, returning
+     * true if the file is successfully opened, and false otherwise. By design, a file opened through this method is
+     * assumed to be temporary its the application's responsibility to remove the file at the appropriate time.
      */
     @Override
     public boolean application_openTempFile(NSApplication app, String filename) {
@@ -835,9 +820,9 @@ public class MainController extends BundleController implements NSApplication.De
     }
 
     /**
-     * Invoked immediately before opening an untitled file. Return false to prevent
-     * the application from opening an untitled file; return true otherwise.
-     * Note that applicationOpenUntitledFile is invoked if this method returns true.
+     * Invoked immediately before opening an untitled file. Return false to prevent the application from opening an
+     * untitled file; return true otherwise. Note that applicationOpenUntitledFile is invoked if this method returns
+     * true.
      */
     @Override
     public boolean applicationShouldOpenUntitledFile(NSApplication sender) {
@@ -859,19 +844,16 @@ public class MainController extends BundleController implements NSApplication.De
     }
 
     /**
-     * These events are sent whenever the Finder reactivates an already running application
-     * because someone double-clicked it again or used the dock to activate it. By default
-     * the Application Kit will handle this event by checking whether there are any visible
-     * NSWindows (not NSPanels), and, if there are none, it goes through the standard untitled
-     * document creation (the same as it does if theApplication is launched without any document
-     * to open). For most document-based applications, an untitled document will be created.
-     * The application delegate will also get a chance to respond to the normal untitled document
-     * delegations. If you implement this method in your application delegate, it will be called
-     * before any of the default behavior happens. If you return true, then NSApplication will
-     * go on to do its normal thing. If you return false, then NSApplication will do nothing.
-     * So, you can either implement this method, do nothing, and return false if you do not
-     * want anything to happen at all (not recommended), or you can implement this method,
-     * handle the event yourself in some custom way, and return false.
+     * These events are sent whenever the Finder reactivates an already running application because someone
+     * double-clicked it again or used the dock to activate it. By default the Application Kit will handle this event by
+     * checking whether there are any visible NSWindows (not NSPanels), and, if there are none, it goes through the
+     * standard untitled document creation (the same as it does if theApplication is launched without any document to
+     * open). For most document-based applications, an untitled document will be created. The application delegate will
+     * also get a chance to respond to the normal untitled document delegations. If you implement this method in your
+     * application delegate, it will be called before any of the default behavior happens. If you return true, then
+     * NSApplication will go on to do its normal thing. If you return false, then NSApplication will do nothing. So, you
+     * can either implement this method, do nothing, and return false if you do not want anything to happen at all (not
+     * recommended), or you can implement this method, handle the event yourself in some custom way, and return false.
      */
     @Override
     public boolean applicationShouldHandleReopen_hasVisibleWindows(final NSApplication app, final boolean visibleWindowsFound) {
@@ -908,13 +890,12 @@ public class MainController extends BundleController implements NSApplication.De
     private final CountDownLatch bookmarksSemaphore = new CountDownLatch(1);
 
     /**
-     * Sent by the default notification center after the application has been launched and initialized but
-     * before it has received its first event. aNotification is always an
-     * ApplicationDidFinishLaunchingNotification. You can retrieve the NSApplication
-     * object in question by sending object to aNotification. The delegate can implement
-     * this method to perform further initialization. If the user started up the application
-     * by double-clicking a file, the delegate receives the applicationOpenFile message before receiving
-     * applicationDidFinishLaunching. (applicationWillFinishLaunching is sent before applicationOpenFile.)
+     * Sent by the default notification center after the application has been launched and initialized but before it has
+     * received its first event. aNotification is always an ApplicationDidFinishLaunchingNotification. You can retrieve
+     * the NSApplication object in question by sending object to aNotification. The delegate can implement this method
+     * to perform further initialization. If the user started up the application by double-clicking a file, the delegate
+     * receives the applicationOpenFile message before receiving applicationDidFinishLaunching.
+     * (applicationWillFinishLaunching is sent before applicationOpenFile.)
      */
     @Override
     public void applicationDidFinishLaunching(NSNotification notification) {
@@ -945,14 +926,14 @@ public class MainController extends BundleController implements NSApplication.De
                         if(log.isInfoEnabled()) {
                             log.info(String.format("New browser for saved session %s", host));
                         }
-                        final BrowserController browser = newDocument(false, host.getUuid());
+                        final BrowserController browser = newDocument(true, host.getUuid());
                         browser.mount(host);
                     }
                     sessions.clear();
                 }
             });
         }
-        final AbstractHostCollection bookmarks = FolderBookmarkCollection.favoritesCollection();
+        final AbstractHostCollection bookmarks = BookmarkCollection.defaultCollection();
         // Load all bookmarks in background
         this.background(new AbstractBackgroundAction<Void>() {
             @Override
@@ -993,8 +974,7 @@ public class MainController extends BundleController implements NSApplication.De
         bonjour.addListener(new NotificationRendezvousListener(bonjour));
         if(preferences.getBoolean("defaulthandler.reminder")
             && preferences.getInteger("uses") > 0) {
-            if(!SchemeHandlerFactory.get().isDefaultHandler(
-                Arrays.asList(Scheme.ftp, Scheme.ftps, Scheme.sftp),
+            if(!SchemeHandlerFactory.get().isDefaultHandler(Arrays.asList(Scheme.ftp.name(), Scheme.ftps.name(), Scheme.sftp.name()),
                 new Application(preferences.getProperty("application.identifier")))) {
                 final NSAlert alert = NSAlert.alert(
                     LocaleFactory.localizedString("Set Cyberduck as default application for FTP and SFTP locations?", "Configuration"),
@@ -1014,8 +994,8 @@ public class MainController extends BundleController implements NSApplication.De
                 }
                 if(choice == SheetCallback.DEFAULT_OPTION) {
                     SchemeHandlerFactory.get().setDefaultHandler(
-                        Arrays.asList(Scheme.ftp, Scheme.ftps, Scheme.sftp),
-                        new Application(preferences.getProperty("application.identifier"))
+                        new Application(preferences.getProperty("application.identifier")),
+                        Arrays.asList(Scheme.ftp.name(), Scheme.ftps.name(), Scheme.sftp.name())
                     );
                 }
             }
@@ -1063,6 +1043,13 @@ public class MainController extends BundleController implements NSApplication.De
                 updater.register();
             }
         }
+        // Register OAuth handler
+        final String handler = preferences.getProperty("oauth.handler.scheme");
+        if(log.isInfoEnabled()) {
+            log.info(String.format("Register OAuth handler %s", handler));
+        }
+        SchemeHandlerFactory.get().setDefaultHandler(new Application(preferences.getProperty("application.identifier")),
+            Collections.singletonList(handler));
         NSAppleEventManager.sharedAppleEventManager().setEventHandler_andSelector_forEventClass_andEventID(
             this.id(), Foundation.selector("handleGetURLEvent:withReplyEvent:"), kInternetEventClass, kAEGetURL);
     }
@@ -1091,10 +1078,9 @@ public class MainController extends BundleController implements NSApplication.De
     }
 
     /**
-     * Invoked from within the terminate method immediately before the
-     * application terminates. sender is the NSApplication to be terminated.
-     * If this method returns false, the application is not terminated,
-     * and control returns to the main event loop.
+     * Invoked from within the terminate method immediately before the application terminates. sender is the
+     * NSApplication to be terminated. If this method returns false, the application is not terminated, and control
+     * returns to the main event loop.
      *
      * @param app Application instance
      * @return Return true to allow the application to terminate.
@@ -1213,6 +1199,7 @@ public class MainController extends BundleController implements NSApplication.De
             log.debug(String.format("Application will quit with notification %s", notification));
         }
         this.invalidate();
+        OAuth2TokenListenerRegistry.get().shutdown();
         // Clear temporary files
         TemporaryFileServiceFactory.get().shutdown();
         //Terminating rendezvous discovery
@@ -1251,7 +1238,7 @@ public class MainController extends BundleController implements NSApplication.De
      */
     @Action
     public void handleGetURLEvent_withReplyEvent(NSAppleEventDescriptor event, NSAppleEventDescriptor reply) {
-        log.debug("Received URL from Apple Event:" + event);
+        log.debug(String.format("Received URL from event %s", event));
         final NSAppleEventDescriptor param = event.paramDescriptorForKeyword(keyAEResult);
         if(null == param) {
             log.error("No URL parameter");
@@ -1262,48 +1249,55 @@ public class MainController extends BundleController implements NSApplication.De
             log.error("URL parameter is empty");
             return;
         }
-        if(StringUtils.startsWith(url, "x-cyberduck-action:")) {
-            final String action = StringUtils.removeStart(url, "x-cyberduck-action:");
-            switch(action) {
-                case "update":
-                    updater.check(false);
-                    break;
-                default:
-                    if(StringUtils.startsWith(action, "oauth?token=")) {
-                        final OAuth2TokenListenerRegistry oauth = OAuth2TokenListenerRegistry.get();
-                        final String token = StringUtils.removeStart(action, "oauth?token=");
-                        oauth.notify(token);
-                        break;
-                    }
-            }
-        }
-        else {
-            try {
-                final Host h = HostParser.parse(url);
-                h.setCredentials(CredentialsConfiguratorFactory.get(h.getProtocol()).configure(h));
-                if(Path.Type.file == detector.detect(h.getDefaultPath())) {
-                    final Path file = new Path(PathNormalizer.normalize(h.getDefaultPath()), EnumSet.of(Path.Type.file));
-                    TransferControllerFactory.get().start(new DownloadTransfer(h, file,
-                        LocalFactory.get(preferences.getProperty("queue.download.folder"), file.getName())), new TransferOptions());
-                }
-                else {
-                    for(BrowserController browser : MainController.getBrowsers()) {
-                        if(browser.isMounted()) {
-                            if(new HostUrlProvider().get(browser.getSession().getHost()).equals(
-                                new HostUrlProvider().get(h))) {
-                                // Handle browser window already connected to the same host. #4215
-                                browser.window().makeKeyAndOrderFront(null);
-                                return;
-                            }
+        switch(url) {
+            case "x-cyberduck-action:update":
+                updater.check(false);
+                break;
+            default:
+                if(StringUtils.startsWith(url, OAuth2AuthorizationService.CYBERDUCK_REDIRECT_URI)) {
+                    final String action = StringUtils.removeStart(url, OAuth2AuthorizationService.CYBERDUCK_REDIRECT_URI);
+                    final List<NameValuePair> pairs = URLEncodedUtils.parse(URI.create(action), Charset.defaultCharset());
+                    String state = StringUtils.EMPTY;
+                    String code = StringUtils.EMPTY;
+                    for(NameValuePair pair : pairs) {
+                        if(StringUtils.equals(pair.getName(), "state")) {
+                            state = StringUtils.equals(pair.getName(), "state") ? pair.getValue() : StringUtils.EMPTY;
+                        }
+                        if(StringUtils.equals(pair.getName(), "code")) {
+                            code = StringUtils.equals(pair.getName(), "code") ? pair.getValue() : StringUtils.EMPTY;
                         }
                     }
-                    final BrowserController browser = newDocument(false);
-                    browser.mount(h);
+                    final OAuth2TokenListenerRegistry oauth = OAuth2TokenListenerRegistry.get();
+                    oauth.notify(state, code);
                 }
-            }
-            catch(HostParserException e) {
-                log.warn(e.getDetail());
-            }
+                else {
+                    try {
+                        final Host h = HostParser.parse(url);
+                        h.setCredentials(CredentialsConfiguratorFactory.get(h.getProtocol()).configure(h));
+                        if(Path.Type.file == detector.detect(h.getDefaultPath())) {
+                            final Path file = new Path(PathNormalizer.normalize(h.getDefaultPath()), EnumSet.of(Path.Type.file));
+                            TransferControllerFactory.get().start(new DownloadTransfer(h, file,
+                                LocalFactory.get(preferences.getProperty("queue.download.folder"), file.getName())), new TransferOptions());
+                        }
+                        else {
+                            for(BrowserController browser : MainController.getBrowsers()) {
+                                if(browser.isMounted()) {
+                                    if(new HostUrlProvider().get(browser.getSession().getHost()).equals(
+                                        new HostUrlProvider().get(h))) {
+                                        // Handle browser window already connected to the same host. #4215
+                                        browser.window().makeKeyAndOrderFront(null);
+                                        return;
+                                    }
+                                }
+                            }
+                            final BrowserController browser = newDocument(false);
+                            browser.mount(h);
+                        }
+                    }
+                    catch(HostParserException e) {
+                        log.warn(e);
+                    }
+                }
         }
     }
 
@@ -1320,9 +1314,8 @@ public class MainController extends BundleController implements NSApplication.De
     }
 
     /**
-     * Posted before a user session is switched out. This allows an application to
-     * disable some processing when its user session is switched out, and reenable when that
-     * session gets switched back in, for example.
+     * Posted before a user session is switched out. This allows an application to disable some processing when its user
+     * session is switched out, and reenable when that session gets switched back in, for example.
      *
      * @param notification Notification name
      */
@@ -1349,9 +1342,10 @@ public class MainController extends BundleController implements NSApplication.De
 
         public ImporterBackgroundAction(final AbstractHostCollection bookmarks, final CountDownLatch lock) {
             this(bookmarks, lock, Arrays.asList(
-                new Transmit4BookmarkCollection(), new FilezillaBookmarkCollection(), new FetchBookmarkCollection(),
+                new Transmit5BookmarkCollection(), new Transmit4BookmarkCollection(), new FilezillaBookmarkCollection(), new FetchBookmarkCollection(),
                 new FlowBookmarkCollection(), new InterarchyBookmarkCollection(), new CrossFtpBookmarkCollection(), new FireFtpBookmarkCollection(),
-                new Expandrive3BookmarkCollection(), new Expandrive4BookmarkCollection(), new Expandrive5BookmarkCollection(), new Expandrive6BookmarkCollection()));
+                new Expandrive3BookmarkCollection(), new Expandrive4BookmarkCollection(), new Expandrive5BookmarkCollection(), new Expandrive6BookmarkCollection(),
+                new Expandrive7BookmarkCollection(), new CloudMounterBookmarkCollection()));
         }
 
         public ImporterBackgroundAction(final AbstractHostCollection bookmarks, final CountDownLatch lock, final List<ThirdpartyBookmarkCollection> collections) {
@@ -1420,7 +1414,7 @@ public class MainController extends BundleController implements NSApplication.De
         final Selector action = item.action();
         if(action.equals(Foundation.selector("updateMenuClicked:"))) {
             if(updater.hasUpdatePrivileges()) {
-                return !updater.isUpdateInProgress();
+                return !updater.isUpdateInProgress(item);
             }
             return false;
         }

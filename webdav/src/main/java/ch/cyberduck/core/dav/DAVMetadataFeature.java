@@ -25,16 +25,25 @@ import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.features.Headers;
 import ch.cyberduck.core.http.HttpExceptionMappingService;
 import ch.cyberduck.core.preferences.PreferencesFactory;
+import ch.cyberduck.core.transfer.TransferStatus;
 
+import org.apache.http.HttpHeaders;
 import org.apache.log4j.Logger;
+import org.w3c.dom.Element;
 
+import javax.xml.namespace.QName;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import com.github.sardine.DavResource;
 import com.github.sardine.impl.SardineException;
+import com.github.sardine.util.SardineUtil;
+
+import static com.github.sardine.util.SardineUtil.CUSTOM_NAMESPACE_PREFIX;
+import static com.github.sardine.util.SardineUtil.CUSTOM_NAMESPACE_URI;
 
 public class DAVMetadataFeature implements Headers {
     private static final Logger log = Logger.getLogger(DAVMetadataFeature.class);
@@ -53,7 +62,7 @@ public class DAVMetadataFeature implements Headers {
     @Override
     public Map<String, String> getMetadata(final Path file) throws BackgroundException {
         try {
-            final List<DavResource> resources = session.getClient().list(new DAVPathEncoder().encode(file));
+            final List<DavResource> resources = session.getClient().list(new DAVPathEncoder().encode(file), 0);
             for(DavResource resource : resources) {
                 return resource.getCustomProps();
             }
@@ -64,7 +73,7 @@ public class DAVMetadataFeature implements Headers {
                 throw new DAVExceptionMappingService().map("Failure to read attributes of {0}", e, file);
             }
             catch(InteroperabilityException | NotfoundException i) {
-                log.warn(String.format("Failure to obtain attributes of %s. %s", file, i.getDetail()));
+                log.warn(String.format("Failure to obtain attributes of %s. %s", file, i));
                 // Workaround for #8902
                 return Collections.emptyMap();
             }
@@ -75,13 +84,24 @@ public class DAVMetadataFeature implements Headers {
     }
 
     @Override
-    public void setMetadata(final Path file, final Map<String, String> metadata) throws BackgroundException {
+    public void setMetadata(final Path file, final TransferStatus status) throws BackgroundException {
         if(log.isDebugEnabled()) {
-            log.debug(String.format("Write metadata %s for file %s", metadata, file));
+            log.debug(String.format("Write metadata %s for file %s", status, file));
         }
         try {
-            session.getClient().setCustomProps(new DAVPathEncoder().encode(file),
-                    metadata, Collections.<java.lang.String>emptyList());
+            final List<Element> props = new ArrayList<>();
+            for(Map.Entry<String, String> entry : status.getMetadata().entrySet()) {
+                Element element = SardineUtil.createElement(new QName(CUSTOM_NAMESPACE_URI, entry.getKey(), CUSTOM_NAMESPACE_PREFIX));
+                element.setTextContent(entry.getValue());
+                props.add(element);
+            }
+            if(status.getLockId() != null) {
+                session.getClient().patch(new DAVPathEncoder().encode(file), props, Collections.emptyList(),
+                    Collections.singletonMap(HttpHeaders.IF, String.format("(<%s>)", status.getLockId())));
+            }
+            else {
+                session.getClient().patch(new DAVPathEncoder().encode(file), props, Collections.emptyList());
+            }
         }
         catch(SardineException e) {
             throw new DAVExceptionMappingService().map("Failure to write attributes of {0}", e, file);

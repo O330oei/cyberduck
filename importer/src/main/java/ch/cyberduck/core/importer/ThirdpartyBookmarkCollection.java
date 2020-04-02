@@ -19,6 +19,7 @@ package ch.cyberduck.core.importer;
  */
 
 import ch.cyberduck.core.AbstractHostCollection;
+import ch.cyberduck.core.Collection;
 import ch.cyberduck.core.Credentials;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Local;
@@ -28,6 +29,7 @@ import ch.cyberduck.core.PasswordStoreFactory;
 import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.BackgroundException;
+import ch.cyberduck.core.exception.LocalAccessDeniedException;
 import ch.cyberduck.core.io.Checksum;
 import ch.cyberduck.core.io.ChecksumComputeFactory;
 import ch.cyberduck.core.io.HashAlgorithm;
@@ -41,13 +43,10 @@ import org.apache.log4j.Logger;
 import java.text.MessageFormat;
 import java.util.Iterator;
 
-public abstract class ThirdpartyBookmarkCollection extends AbstractHostCollection {
+public abstract class ThirdpartyBookmarkCollection extends Collection<Host> {
     private static final Logger log = Logger.getLogger(ThirdpartyBookmarkCollection.class);
 
-    private static final long serialVersionUID = -4582425984484543617L;
-
     private final Preferences preferences = PreferencesFactory.get();
-
     private final PasswordStore keychain;
 
     public ThirdpartyBookmarkCollection() {
@@ -65,20 +64,22 @@ public abstract class ThirdpartyBookmarkCollection extends AbstractHostCollectio
             if(log.isInfoEnabled()) {
                 log.info(String.format("Found bookmarks file at %s", file));
             }
-            Checksum current = null;
-            try {
-                current = ChecksumComputeFactory.get(HashAlgorithm.md5).compute(file.getInputStream(), new TransferStatus());
-                if(log.isDebugEnabled()) {
-                    log.debug(String.format("Current checksum for %s is %s", file, current));
+            Checksum current = Checksum.NONE;
+            if(file.isFile()) {
+                try {
+                    current = ChecksumComputeFactory.get(HashAlgorithm.md5).compute(file.getInputStream(), new TransferStatus());
+                    if(log.isDebugEnabled()) {
+                        log.debug(String.format("Current checksum for %s is %s", file, current));
+                    }
                 }
-            }
-            catch(BackgroundException e) {
-                log.warn(String.format("Failure obtaining checksum for %s", file));
+                catch(BackgroundException e) {
+                    log.warn(String.format("Failure obtaining checksum for %s", file));
+                }
             }
             if(preferences.getBoolean(this.getConfiguration())) {
                 // Previously imported
                 final Checksum previous = new Checksum(HashAlgorithm.md5,
-                        preferences.getProperty(String.format("%s.checksum", this.getConfiguration())));
+                    preferences.getProperty(String.format("%s.checksum", this.getConfiguration())));
                 if(log.isDebugEnabled()) {
                     log.debug(String.format("Saved previous checksum %s for bookmark %s", previous, file));
                 }
@@ -120,6 +121,11 @@ public abstract class ThirdpartyBookmarkCollection extends AbstractHostCollectio
         super.load();
     }
 
+    /**
+     * @return Application name
+     */
+    public abstract String getName();
+
     public abstract Local getFile();
 
     protected void parse(Local file) throws AccessDeniedException {
@@ -129,7 +135,7 @@ public abstract class ThirdpartyBookmarkCollection extends AbstractHostCollectio
     protected abstract void parse(final ProtocolFactory protocols, Local file) throws AccessDeniedException;
 
     public boolean isInstalled() {
-        return StringUtils.isNotBlank(this.getName());
+        return this.getFile().exists();
     }
 
     public abstract String getBundleIdentifier();
@@ -162,12 +168,22 @@ public abstract class ThirdpartyBookmarkCollection extends AbstractHostCollectio
         final Credentials credentials = bookmark.getCredentials();
         if(StringUtils.isNotBlank(credentials.getPassword())) {
             if(credentials.isPublicKeyAuthentication()) {
-                keychain.addPassword(bookmark.getHostname(), credentials.getIdentity().getAbbreviatedPath(),
+                try {
+                    keychain.addPassword(bookmark.getHostname(), credentials.getIdentity().getAbbreviatedPath(),
                         credentials.getPassword());
+                }
+                catch(LocalAccessDeniedException e) {
+                    log.error(String.format("Failure %s saving credentials for %s in password store", e, bookmark));
+                }
             }
             else if(!credentials.isAnonymousLogin()) {
-                keychain.addPassword(bookmark.getProtocol().getScheme(), bookmark.getPort(),
+                try {
+                    keychain.addPassword(bookmark.getProtocol().getScheme(), bookmark.getPort(),
                         bookmark.getHostname(), credentials.getUsername(), credentials.getPassword());
+                }
+                catch(LocalAccessDeniedException e) {
+                    log.error(String.format("Failure %s saving credentials for %s in password store", e, bookmark));
+                }
                 // Reset password in memory
                 credentials.setPassword(null);
             }

@@ -1,6 +1,17 @@
 package ch.cyberduck.core.openstack;
 
-import ch.cyberduck.core.*;
+import ch.cyberduck.core.Credentials;
+import ch.cyberduck.core.DescriptiveUrl;
+import ch.cyberduck.core.DisabledCancelCallback;
+import ch.cyberduck.core.DisabledHostKeyCallback;
+import ch.cyberduck.core.DisabledLoginCallback;
+import ch.cyberduck.core.Host;
+import ch.cyberduck.core.Local;
+import ch.cyberduck.core.Path;
+import ch.cyberduck.core.Profile;
+import ch.cyberduck.core.ProtocolFactory;
+import ch.cyberduck.core.Session;
+import ch.cyberduck.core.UrlProvider;
 import ch.cyberduck.core.analytics.AnalyticsProvider;
 import ch.cyberduck.core.cdn.DistributionConfiguration;
 import ch.cyberduck.core.exception.LoginFailureException;
@@ -13,6 +24,8 @@ import ch.cyberduck.core.features.Redundancy;
 import ch.cyberduck.core.features.Versioning;
 import ch.cyberduck.core.proxy.Proxy;
 import ch.cyberduck.core.serializer.impl.dd.ProfilePlistReader;
+import ch.cyberduck.core.ssl.DefaultX509KeyManager;
+import ch.cyberduck.core.ssl.DisabledX509TrustManager;
 import ch.cyberduck.test.IntegrationTest;
 
 import org.junit.Test;
@@ -25,11 +38,10 @@ import java.util.HashSet;
 import static org.junit.Assert.*;
 
 @Category(IntegrationTest.class)
-public class SwiftSessionTest {
+public class SwiftSessionTest extends AbstractSwiftTest {
 
     @Test
     public void testFeatures() {
-        final SwiftSession session = new SwiftSession(new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com"));
         assertNull(session.getFeature(Versioning.class));
         assertNotNull(session.getFeature(AnalyticsProvider.class));
         assertNull(session.getFeature(Lifecycle.class));
@@ -43,12 +55,6 @@ public class SwiftSessionTest {
 
     @Test
     public void testConnectRackspace() throws Exception {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-            System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
-        new LoginConnectionService(new DisabledLoginCallback(), new DisabledHostKeyCallback(),
-            new DisabledPasswordStore(), new DisabledProgressListener()).connect(session, PathCache.empty(), new DisabledCancelCallback());
         assertTrue(session.isConnected());
         final Path container = new Path("/test.cyberduck.ch", EnumSet.of(Path.Type.volume, Path.Type.directory));
         container.attributes().setRegion("IAD");
@@ -68,9 +74,6 @@ public class SwiftSessionTest {
         final Host host = new Host(profile, profile.getDefaultHostname(), new Credentials(
             System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
         ));
-        final SwiftSession session = new SwiftSession(host);
-        new LoginConnectionService(new DisabledLoginCallback(), new DisabledHostKeyCallback(),
-            new DisabledPasswordStore(), new DisabledProgressListener()).connect(session, PathCache.empty(), new DisabledCancelCallback());
         assertTrue(session.isConnected());
         session.close();
         assertFalse(session.isConnected());
@@ -82,7 +85,6 @@ public class SwiftSessionTest {
         final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
             "a", "s"
         ));
-        final SwiftSession session = new SwiftSession(host);
         assertNotNull(session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback()));
         assertTrue(session.isConnected());
         assertNotNull(session.getClient());
@@ -100,7 +102,7 @@ public class SwiftSessionTest {
         final Host host = new Host(protocol, "storage.us2.oraclecloud.com", new Credentials(
             System.getProperties().getProperty("oraclecloud.key"), System.getProperties().getProperty("oraclecloud.secret")
         ));
-        final SwiftSession session = new SwiftSession(host);
+        final SwiftSession session = new SwiftSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
         assertNotNull(session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback()));
         assertTrue(session.isConnected());
         assertNotNull(session.getClient());

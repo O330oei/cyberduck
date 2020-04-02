@@ -60,7 +60,7 @@ public class VaultRegistryMoveFeature implements Move {
             // Moving files from or into vault requires to pass through encryption features using copy operation
             final Path copy = session.getFeature(Copy.class).withTarget(destination).copy(source, target, status, callback);
             // Delete source file after copy is complete
-            session.getFeature(Delete.class).delete(Collections.singletonList(source), callback, delete);
+            session.getFeature(Delete.class).delete(Collections.singletonMap(source, status), callback, delete);
             return copy;
         }
     }
@@ -90,12 +90,6 @@ public class VaultRegistryMoveFeature implements Move {
         catch(VaultUnlockCancelException e) {
             return proxy.isSupported(source, target);
         }
-    }
-
-    @Override
-    public Move withDelete(final Delete delete) {
-        proxy.withDelete(delete);
-        return this;
     }
 
     @Override

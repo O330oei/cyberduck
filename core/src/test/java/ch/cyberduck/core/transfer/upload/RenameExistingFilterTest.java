@@ -66,10 +66,6 @@ public class RenameExistingFilterTest {
                             return true;
                         }
 
-                        @Override
-                        public Move withDelete(final Delete delete) {
-                            return this;
-                        }
                     };
                 }
                 return super._getFeature(type);
@@ -122,7 +118,7 @@ public class RenameExistingFilterTest {
                 if(type.equals(Move.class)) {
                     return (T) new Move() {
                         @Override
-                        public Path move(final Path source, final Path renamed, TransferStatus status, final Delete.Callback callback, final ConnectionCallback connectionCallback) {
+                        public Path move(final Path source, final Path renamed, final TransferStatus status, final Delete.Callback callback, final ConnectionCallback connectionCallback) {
                             if(moved.incrementAndGet() == 1) {
                                 // Rename existing target file
                                 assertEquals(file, source);
@@ -140,11 +136,6 @@ public class RenameExistingFilterTest {
                         @Override
                         public boolean isRecursive(final Path source, final Path target) {
                             return true;
-                        }
-
-                        @Override
-                        public Move withDelete(final Delete delete) {
-                            return this;
                         }
 
                     };
@@ -233,11 +224,6 @@ public class RenameExistingFilterTest {
                         @Override
                         public boolean isRecursive(final Path source, final Path target) {
                             return true;
-                        }
-
-                        @Override
-                        public Move withDelete(final Delete delete) {
-                            return this;
                         }
 
                     };

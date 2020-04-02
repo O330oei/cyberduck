@@ -25,13 +25,12 @@ import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LoginConnectionService;
 import ch.cyberduck.core.LoginOptions;
 import ch.cyberduck.core.PathCache;
+import ch.cyberduck.core.exception.LoginCanceledException;
 import ch.cyberduck.core.ssl.DefaultX509KeyManager;
 import ch.cyberduck.core.ssl.DisabledX509TrustManager;
 
 import org.junit.After;
 import org.junit.Before;
-
-import static org.junit.Assert.fail;
 
 public class AbstractSDSTest {
 
@@ -46,15 +45,14 @@ public class AbstractSDSTest {
 
     @Before
     public void setup() throws Exception {
-        session = new SDSSession(new Host(new SDSProtocol(), "duck.ssp-europe.eu", new Credentials(
+        session = new SDSSession(new Host(new SDSProtocol(), "duck.dracoon.com", new Credentials(
             System.getProperties().getProperty("sds.user"), System.getProperties().getProperty("sds.key")
         )), new DisabledX509TrustManager(), new DefaultX509KeyManager());
         session.enableMetrics();
         final LoginConnectionService connect = new LoginConnectionService(new DisabledLoginCallback() {
             @Override
-            public Credentials prompt(final Host bookmark, final String title, final String reason, final LoginOptions options) {
-                fail(reason);
-                return null;
+            public Credentials prompt(final Host bookmark, final String title, final String reason, final LoginOptions options) throws LoginCanceledException {
+                throw new LoginCanceledException();
             }
         }, new DisabledHostKeyCallback(),
             new DisabledPasswordStore(), new DisabledProgressListener());

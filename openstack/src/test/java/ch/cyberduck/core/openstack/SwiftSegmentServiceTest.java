@@ -1,14 +1,8 @@
 package ch.cyberduck.core.openstack;
 
-import ch.cyberduck.core.Credentials;
-import ch.cyberduck.core.DisabledCancelCallback;
-import ch.cyberduck.core.DisabledHostKeyCallback;
-import ch.cyberduck.core.DisabledLoginCallback;
-import ch.cyberduck.core.Host;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.io.Checksum;
 import ch.cyberduck.core.io.MD5ChecksumCompute;
-import ch.cyberduck.core.proxy.Proxy;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.test.IntegrationTest;
 
@@ -27,30 +21,19 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 @Category(IntegrationTest.class)
-public class SwiftSegmentServiceTest {
+public class SwiftSegmentServiceTest extends AbstractSwiftTest {
 
     @Test
     public void testList() throws Exception {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
-        session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
-        session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
-        final Path container = new Path("/test-iad-cyberduck", EnumSet.of(Path.Type.volume, Path.Type.directory));
+        final Path container = new Path("/test.cyberduck.ch", EnumSet.of(Path.Type.volume, Path.Type.directory));
         container.attributes().setRegion("IAD");
         assertTrue(new SwiftSegmentService(session).list(new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file))).isEmpty());
-        session.close();
     }
 
     @Test
     public void testManifest() {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
         final SwiftSegmentService service = new SwiftSegmentService(session);
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         container.attributes().setRegion("IAD");
         final StorageObject a = new StorageObject("a");
         a.setMd5sum("m1");
@@ -59,17 +42,13 @@ public class SwiftSegmentServiceTest {
         b.setMd5sum("m2");
         b.setSize(1L);
         final String manifest = service.manifest(container.getName(), Arrays.asList(a, b));
-        assertEquals("[{\"path\":\"/test-iad-cyberduck/a\",\"etag\":\"m1\",\"size_bytes\":1},{\"path\":\"/test-iad-cyberduck/b\",\"etag\":\"m2\",\"size_bytes\":1}]", manifest);
+        assertEquals("[{\"path\":\"/test.cyberduck.ch/a\",\"etag\":\"m1\",\"size_bytes\":1},{\"path\":\"/test.cyberduck.ch/b\",\"etag\":\"m2\",\"size_bytes\":1}]", manifest);
     }
 
     @Test
     public void testChecksum() throws Exception {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
         final SwiftSegmentService service = new SwiftSegmentService(session);
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         container.attributes().setRegion("IAD");
         final Path file = new Path(container, "a", EnumSet.of(Path.Type.file));
         final StorageObject a = new StorageObject("a");
@@ -84,30 +63,22 @@ public class SwiftSegmentServiceTest {
 
     @Test
     public void testGetSegmentsDirectory() {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
         final SwiftSegmentService service = new SwiftSegmentService(session, ".prefix/");
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         final String name = UUID.randomUUID().toString();
         final String key = UUID.randomUUID().toString() + "/" + name;
-        assertEquals("/test-iad-cyberduck/.prefix/" + name + "/3", service.getSegmentsDirectory(new Path(container, key, EnumSet.of(Path.Type.file)), 3L).getAbsolute());
+        assertEquals("/test.cyberduck.ch/.prefix/" + name + "/3", service.getSegmentsDirectory(new Path(container, key, EnumSet.of(Path.Type.file)), 3L).getAbsolute());
         final Path directory = new Path(container, "dir", EnumSet.of(Path.Type.directory));
-        assertEquals("/test-iad-cyberduck/dir/.prefix/" + name + "/3", service.getSegmentsDirectory(new Path(directory, key, EnumSet.of(Path.Type.file)), 3L).getAbsolute());
+        assertEquals("/test.cyberduck.ch/dir/.prefix/" + name + "/3", service.getSegmentsDirectory(new Path(directory, key, EnumSet.of(Path.Type.file)), 3L).getAbsolute());
     }
 
     @Test
     public void testGetSegmentName() {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
         final SwiftSegmentService service = new SwiftSegmentService(session, ".prefix/");
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         final Path directory = new Path(container, "dir", EnumSet.of(Path.Type.directory));
         final String name = "name";
         final String key = "sub/" + name;
-        assertEquals("/test-iad-cyberduck/dir/.prefix/name/1/00000001", service.getSegment(new Path(directory, key, EnumSet.of(Path.Type.file)), 1L, 1).getAbsolute());
+        assertEquals("/test.cyberduck.ch/dir/.prefix/name/1/00000001", service.getSegment(new Path(directory, key, EnumSet.of(Path.Type.file)), 1L, 1).getAbsolute());
     }
 }

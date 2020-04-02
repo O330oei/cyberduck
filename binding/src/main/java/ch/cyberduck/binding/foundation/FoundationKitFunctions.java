@@ -22,10 +22,18 @@ package ch.cyberduck.binding.foundation;
 import org.rococoa.cocoa.foundation.NSPoint;
 import org.rococoa.cocoa.foundation.NSRect;
 import org.rococoa.cocoa.foundation.NSSize;
+import org.rococoa.internal.RococoaTypeMapper;
+
+import java.util.Collections;
 
 import com.sun.jna.Library;
+import com.sun.jna.Native;
+import com.sun.jna.PointerType;
 
 public interface FoundationKitFunctions extends Library {
+    FoundationKitFunctions library = Native.load(
+        "Foundation", FoundationKitFunctions.class, Collections.singletonMap(Library.OPTION_TYPE_MAPPER, new RococoaTypeMapper()));
+
     /**
      * <i>native declaration : /System/Library/Frameworks/ApplicationServices.framework/Headers/../Frameworks/CoreGraphics.framework/Headers/CGGeometry.h:36</i><br>
      * enum values
@@ -269,7 +277,8 @@ public interface FoundationKitFunctions extends Library {
     String NSTemporaryDirectory();
 
     /**
-     * Original signature : <code>NSArray* NSSearchPathForDirectoriesInDomains(NSSearchPathDirectory, NSSearchPathDomainMask, BOOL)</code><br>
+     * Original signature : <code>NSArray* NSSearchPathForDirectoriesInDomains(NSSearchPathDirectory,
+     * NSSearchPathDomainMask, BOOL)</code><br>
      * <i>native declaration : /System/Library/Frameworks/Foundation.framework/Headers/NSPathUtilities.h:106</i><br>
      *
      * @param directory  @see NSSearchPathDirectory<br>
@@ -285,5 +294,7 @@ public interface FoundationKitFunctions extends Library {
     void NSLog(String format, String... args);
 
     CFStringRef CFStringCreateWithCharacters(CFAllocatorRef allocator, char[] chars, CFIndex index);
+
+    void CFRelease(PointerType ref);
 }
 

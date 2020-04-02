@@ -25,8 +25,10 @@ import ch.cyberduck.core.serializer.Serializer;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
+import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 public class Host implements Serializable, Comparable<Host> {
@@ -139,6 +141,11 @@ public class Host implements Serializable, Comparable<Host> {
     private Map<String, String> custom;
 
     /**
+     * Group bookmarks in view
+     */
+    private Set<String> labels;
+
+    /**
      * @param protocol Scheme
      */
     public Host(final Protocol protocol) {
@@ -226,6 +233,7 @@ public class Host implements Serializable, Comparable<Host> {
         this.volume = other.volume;
         this.readonly = other.readonly;
         this.custom = other.custom;
+        this.labels = other.labels;
     }
 
     @Override
@@ -299,6 +307,9 @@ public class Host implements Serializable, Comparable<Host> {
         }
         if(null != custom) {
             dict.setMapForKey(custom, "Custom");
+        }
+        if(null != labels) {
+            dict.setStringListForKey(labels, "Labels");
         }
         return dict.getSerialized();
     }
@@ -450,10 +461,6 @@ public class Host implements Serializable, Comparable<Host> {
      * if the default should be used
      */
     public TransferType getTransferType() {
-        switch(transfer) {
-            case unknown:
-                return Host.TransferType.valueOf(PreferencesFactory.get().getProperty("queue.transfer.type"));
-        }
         return transfer;
     }
 
@@ -546,6 +553,11 @@ public class Host implements Serializable, Comparable<Host> {
         webURL = url;
     }
 
+    public Host withWebURL(final String url) {
+        this.setWebURL(url);
+        return this;
+    }
+
     /**
      * @return The date this bookmark was last accessed.
      */
@@ -579,11 +591,19 @@ public class Host implements Serializable, Comparable<Host> {
     }
 
     public Map<String, String> getCustom() {
-        return custom;
+        return null == custom ? Collections.emptyMap() : custom;
     }
 
     public void setCustom(final Map<String, String> custom) {
         this.custom = custom;
+    }
+
+    public Set<String> getLabels() {
+        return null == labels ? Collections.emptySet() : labels;
+    }
+
+    public void setLabels(final Set<String> labels) {
+        this.labels = labels;
     }
 
     @Override
@@ -634,11 +654,13 @@ public class Host implements Serializable, Comparable<Host> {
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("Host{");
-        sb.append("credentials=").append(credentials);
-        sb.append(", hostname='").append(hostname).append('\'');
-        sb.append(", defaultpath='").append(defaultpath).append('\'');
+        sb.append("protocol=").append(protocol);
         sb.append(", port=").append(port);
-        sb.append(", protocol=").append(protocol);
+        sb.append(", hostname='").append(hostname).append('\'');
+        sb.append(", credentials=").append(credentials);
+        sb.append(", uuid='").append(uuid).append('\'');
+        sb.append(", nickname='").append(nickname).append('\'');
+        sb.append(", defaultpath='").append(defaultpath).append('\'');
         sb.append('}');
         return sb.toString();
     }

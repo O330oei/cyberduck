@@ -25,23 +25,17 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.function.Predicate;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public abstract class AbstractHostCollection extends Collection<Host> implements EditableCollection {
-    private static final long serialVersionUID = -255801158019850767L;
-
     private static final Logger log = Logger.getLogger(AbstractHostCollection.class);
 
     private static final AbstractHostCollection EMPTY = new AbstractHostCollection() {
-        private static final long serialVersionUID = -8444415684736364173L;
-
-        @Override
-        public String getName() {
-            return LocaleFactory.localizedString("None");
-        }
+        // Empty
     };
 
     public static AbstractHostCollection empty() {
@@ -57,128 +51,40 @@ public abstract class AbstractHostCollection extends Collection<Host> implements
     }
 
     /**
-     * @return Group label
+     * Default ordering using natural order of bookmark name
      */
-    public abstract String getName();
-
-    /**
-     * @param h Bookmark
-     * @return User comment for bookmark or null
-     */
-    public String getComment(final Host h) {
-        if(StringUtils.isNotBlank(h.getComment())) {
-            return StringUtils.remove(StringUtils.remove(h.getComment(), CharUtils.LF), CharUtils.CR);
-        }
-        return null;
-    }
-
-    @Override
-    public boolean addAll(final java.util.Collection<? extends Host> c) {
-        List<Host> temporary = new ArrayList<Host>();
-        for(Host host : c) {
-            if(temporary.contains(host)) {
-                log.warn(String.format("Reset UUID of duplicate in collection for %s", host));
-                host.setUuid(null);
-            }
-            temporary.add(host);
-        }
-        return super.addAll(temporary);
-    }
-
-    @Override
-    public boolean add(final Host host) {
-        if(this.contains(host)) {
-            log.warn(String.format("Reset UUID of duplicate in collection for %s", host));
-            host.setUuid(null);
-        }
-        return super.add(host);
-    }
-
-    @Override
-    public void add(final int row, final Host host) {
-        if(this.contains(host)) {
-            log.warn(String.format("Reset UUID of duplicate in collection for %s", host));
-            host.setUuid(null);
-        }
-        super.add(row, host);
-    }
-
-    @Override
-    public void collectionItemAdded(final Host item) {
-        if(this.isLocked()) {
-            log.debug("Skip sorting bookmark collection while loading");
-        }
-        else {
-            this.sort();
-        }
-        super.collectionItemAdded(item);
-    }
-
-    @Override
-    public void collectionItemRemoved(final Host item) {
-        if(this.isLocked()) {
-            log.debug("Skip sorting bookmark collection while loading");
-        }
-        else {
-            this.sort();
-        }
-        super.collectionItemRemoved(item);
-    }
-
-    private final Comparator<String> comparator = new NaturalOrderComparator();
-
-    public synchronized void sortByNickname() {
-        this.doSort(new Comparator<Host>() {
+    public void sort() {
+        this.sort(new Comparator<Host>() {
             @Override
-            public int compare(Host o1, Host o2) {
-                return comparator.compare(
-                        BookmarkNameProvider.toString(o1), BookmarkNameProvider.toString(o2)
-                );
+            public int compare(final Host o1, final Host o2) {
+                return new NaturalOrderComparator().compare(BookmarkNameProvider.toString(o1),
+                    BookmarkNameProvider.toString(o2));
             }
         });
-    }
-
-    public synchronized void sortByHostname() {
-        this.doSort(new Comparator<Host>() {
-            @Override
-            public int compare(Host o1, Host o2) {
-                return comparator.compare(o1.getHostname(), o2.getHostname());
-            }
-        });
-    }
-
-    public synchronized void sortByProtocol() {
-        this.doSort(new Comparator<Host>() {
-            @Override
-            public int compare(Host o1, Host o2) {
-                return comparator.compare(o1.getProtocol().getIdentifier(), o2.getProtocol().getIdentifier());
-            }
-        });
-    }
-
-    public synchronized void doSort(final Comparator<Host> comparator) {
-        Collections.sort(FolderBookmarkCollection.favoritesCollection(), comparator);
-        // Save new index
-        this.save();
-    }
-
-    protected void sort() {
-        //
     }
 
     /**
-     * Lookup bookmark by UUID
+     * A bookmark may be member of multiple groups
      *
-     * @param uuid Identifier of bookmark
-     * @return Null if not found
+     * @return Map of bookmarks grouped by labels
      */
-    public Host lookup(final String uuid) {
-        for(Host bookmark : this) {
-            if(bookmark.getUuid().equals(uuid)) {
-                return bookmark;
+    public Map<String, List<Host>> groups(final HostFilter filter) {
+        final Map<String, List<Host>> labels = new HashMap<>();
+        for(Host host : this.stream().filter(filter::accept).collect(Collectors.toList())) {
+            if(host.getLabels().isEmpty()) {
+                final List<Host> list = labels.getOrDefault(StringUtils.EMPTY, new ArrayList<>());
+                list.add(host);
+                labels.put(StringUtils.EMPTY, list);
+            }
+            else {
+                for(String label : host.getLabels()) {
+                    final List<Host> list = labels.getOrDefault(label, new ArrayList<>());
+                    list.add(host);
+                    labels.put(label, list);
+                }
             }
         }
-        return null;
+        return labels;
     }
 
     /**
@@ -211,29 +117,33 @@ public abstract class AbstractHostCollection extends Collection<Host> implements
         return true;
     }
 
-    public void save() {
-        // Not persistent by default
-    }
-
-    protected void load(Collection<Host> c) {
-        this.addAll(c);
-        this.collectionLoaded();
-    }
-
     /**
      * Search using comparator
      *
      * @param bookmark Bookmark to find that matches comparison
      */
     public boolean find(final Host bookmark) {
-        return this.stream().anyMatch(new Predicate<Host>() {
-            @Override
-            public boolean test(final Host h) {
-                if(h.compareTo(bookmark) == 0) {
-                    return true;
-                }
-                return false;
-            }
-        });
+        return this.stream().anyMatch(h -> h.compareTo(bookmark) == 0);
+    }
+
+    /**
+     * Lookup bookmark by UUID
+     *
+     * @param uuid Identifier of bookmark
+     * @return Null if not found
+     */
+    public Host lookup(final String uuid) {
+        return this.stream().filter(h -> h.getUuid().equals(uuid)).findFirst().orElse(null);
+    }
+
+    /**
+     * @param h Bookmark
+     * @return User comment for bookmark or null
+     */
+    public String getComment(final Host h) {
+        if(StringUtils.isNotBlank(h.getComment())) {
+            return StringUtils.remove(StringUtils.remove(h.getComment(), CharUtils.LF), CharUtils.CR);
+        }
+        return null;
     }
 }

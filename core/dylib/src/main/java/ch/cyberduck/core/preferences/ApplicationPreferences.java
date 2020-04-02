@@ -16,12 +16,11 @@ package ch.cyberduck.core.preferences;
  */
 
 import ch.cyberduck.core.ApplescriptTerminalService;
-import ch.cyberduck.core.Factory;
 import ch.cyberduck.core.IOKitSleepPreventer;
-import ch.cyberduck.core.Keychain;
+import ch.cyberduck.core.KeychainCertificateStore;
+import ch.cyberduck.core.KeychainPasswordStore;
 import ch.cyberduck.core.aquaticprime.ReceiptFactory;
 import ch.cyberduck.core.diagnostics.SystemConfigurationReachability;
-import ch.cyberduck.core.editor.FSEventWatchEditorFactory;
 import ch.cyberduck.core.i18n.BundleRegexLocale;
 import ch.cyberduck.core.local.DisabledFilesystemBookmarkResolver;
 import ch.cyberduck.core.local.FileManagerWorkingDirectoryFinder;
@@ -39,9 +38,9 @@ import ch.cyberduck.core.local.WorkspaceRevealService;
 import ch.cyberduck.core.local.WorkspaceSymlinkFeature;
 import ch.cyberduck.core.notification.NotificationCenter;
 import ch.cyberduck.core.proxy.SystemConfigurationProxy;
+import ch.cyberduck.core.quicklook.QuartzQuickLook;
 import ch.cyberduck.core.resources.NSImageIconCache;
 import ch.cyberduck.core.sparkle.Sandbox;
-import ch.cyberduck.core.sparkle.Updater;
 import ch.cyberduck.core.threading.AutoreleaseActionOperationBatcher;
 import ch.cyberduck.core.urlhandler.LaunchServicesSchemeHandler;
 import ch.cyberduck.core.webloc.WeblocFileWriter;
@@ -55,11 +54,12 @@ public class ApplicationPreferences extends UserDefaultsPreferences {
         this.setDefault("factory.supportdirectoryfinder.class", SecurityApplicationGroupSupportDirectoryFinder.class.getName());
         this.setDefault("factory.localsupportdirectoryfinder.class", SecurityApplicationGroupSupportDirectoryFinder.class.getName());
         this.setDefault("factory.applicationresourcesfinder.class", BundleApplicationResourcesFinder.class.getName());
+        this.setDefault("factory.applicationloginregistry.class", SharedFileListApplicationLoginRegistry.class.getName());
         this.setDefault("factory.autorelease.class", AutoreleaseActionOperationBatcher.class.getName());
         this.setDefault("factory.local.class", FinderLocal.class.getName());
         this.setDefault("factory.locale.class", BundleRegexLocale.class.getName());
-        this.setDefault("factory.passwordstore.class", Keychain.class.getName());
-        this.setDefault("factory.certificatestore.class", Keychain.class.getName());
+        this.setDefault("factory.passwordstore.class", KeychainPasswordStore.class.getName());
+        this.setDefault("factory.certificatestore.class", KeychainCertificateStore.class.getName());
         this.setDefault("factory.proxy.class", SystemConfigurationProxy.class.getName());
         this.setDefault("factory.sleeppreventer.class", IOKitSleepPreventer.class.getName());
         this.setDefault("factory.reachability.class", SystemConfigurationReachability.class.getName());
@@ -73,13 +73,10 @@ public class ApplicationPreferences extends UserDefaultsPreferences {
         this.setDefault("factory.symlink.class", WorkspaceSymlinkFeature.class.getName());
         this.setDefault("factory.terminalservice.class", ApplescriptTerminalService.class.getName());
         this.setDefault("factory.badgelabeler.class", WorkspaceApplicationBadgeLabeler.class.getName());
-        this.setDefault("factory.editorfactory.class", FSEventWatchEditorFactory.class.getName());
-        if(null == Updater.getFeed()) {
+        if(null == this.getDefault("SUExpectsDSASignature")) {
             this.setDefault("factory.licensefactory.class", ReceiptFactory.class.getName());
         }
-        if(!Factory.Platform.osversion.matches("10\\.(5|6|7).*")) {
-            this.setDefault("factory.notification.class", NotificationCenter.class.getName());
-        }
+        this.setDefault("factory.notification.class", NotificationCenter.class.getName());
         this.setDefault("factory.iconservice.class", WorkspaceIconService.class.getName());
         this.setDefault("factory.filedescriptor.class", LaunchServicesFileDescriptor.class.getName());
         this.setDefault("factory.schemehandler.class", LaunchServicesSchemeHandler.class.getName());
@@ -93,5 +90,6 @@ public class ApplicationPreferences extends UserDefaultsPreferences {
             this.setDefault("factory.bookmarkresolver.class", DisabledFilesystemBookmarkResolver.class.getName());
         }
         this.setDefault("factory.urlfilewriter.class", WeblocFileWriter.class.getName());
+        this.setDefault("factory.quicklook.class", QuartzQuickLook.class.getName());
     }
 }

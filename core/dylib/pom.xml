@@ -5,7 +5,7 @@
         <groupId>ch.cyberduck</groupId>
         <artifactId>parent</artifactId>
         <relativePath>../../pom.xml</relativePath>
-        <version>6.9.3-SNAPSHOT</version>
+        <version>7.3.1-SNAPSHOT</version>
     </parent>
     <artifactId>libcore</artifactId>
 
@@ -75,6 +75,11 @@
         <dependency>
             <groupId>ch.cyberduck</groupId>
             <artifactId>core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.cyberduck</groupId>
+            <artifactId>importer</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

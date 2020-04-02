@@ -31,15 +31,8 @@ public interface CertificateStore {
      * @param certificates Certificate chain
      * @return True if trusted in Keychain
      */
-    boolean isTrusted(String hostname, List<X509Certificate> certificates)
-            throws CertificateException;
-
-    /**
-     * @param certificates X.509 certificates
-     * @return False if display is not possible
-     */
-    boolean display(List<X509Certificate> certificates)
-            throws CertificateException;
+    boolean verify(CertificateTrustCallback prompt, String hostname, List<X509Certificate> certificates)
+        throws CertificateException;
 
     /**
      * Prompt user for client certificate
@@ -47,9 +40,8 @@ public interface CertificateStore {
      * @param keyTypes Encryption algorithms
      * @param issuers  Distinguished names. X500 Principal with distinguished name as in RFC 2253
      * @param bookmark Client hostname
-     * @param prompt   Display in certificate choose prompt
      * @return Null if no certificate selected
      */
-    X509Certificate choose(String[] keyTypes, Principal[] issuers, Host bookmark, String prompt)
-            throws ConnectionCanceledException;
+    X509Certificate choose(CertificateIdentityCallback prompt, String[] keyTypes, Principal[] issuers, Host bookmark)
+        throws ConnectionCanceledException;
 }

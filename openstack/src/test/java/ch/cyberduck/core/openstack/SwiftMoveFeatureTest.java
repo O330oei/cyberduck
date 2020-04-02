@@ -17,41 +17,37 @@ package ch.cyberduck.core.openstack;
  * Bug fixes, suggestions and comments should be sent to feedback@cyberduck.ch
  */
 
-import ch.cyberduck.core.Credentials;
-import ch.cyberduck.core.DisabledCancelCallback;
 import ch.cyberduck.core.DisabledConnectionCallback;
-import ch.cyberduck.core.DisabledHostKeyCallback;
 import ch.cyberduck.core.DisabledLoginCallback;
-import ch.cyberduck.core.Host;
+import ch.cyberduck.core.DisabledPasswordCallback;
 import ch.cyberduck.core.Path;
+import ch.cyberduck.core.PathAttributes;
+import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.features.Delete;
-import ch.cyberduck.core.proxy.Proxy;
+import ch.cyberduck.core.io.StreamCopier;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.test.IntegrationTest;
 
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import java.io.ByteArrayInputStream;
+import java.io.OutputStream;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.UUID;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 @Category(IntegrationTest.class)
-public class SwiftMoveFeatureTest {
+public class SwiftMoveFeatureTest extends AbstractSwiftTest {
 
     @Test
     public void testMove() throws Exception {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
-        session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
-        session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         container.attributes().setRegion("IAD");
         final Path test = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
         test.attributes().setRegion("IAD");
@@ -63,18 +59,11 @@ public class SwiftMoveFeatureTest {
         assertFalse(new SwiftFindFeature(session).find(test));
         assertTrue(new SwiftFindFeature(session).find(target));
         new SwiftDeleteFeature(session).delete(Collections.<Path>singletonList(target), new DisabledLoginCallback(), new Delete.DisabledCallback());
-        session.close();
     }
 
     @Test
     public void testMoveOverride() throws Exception {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
-        session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
-        session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         container.attributes().setRegion("IAD");
         final Path test = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
         test.attributes().setRegion("IAD");
@@ -86,18 +75,11 @@ public class SwiftMoveFeatureTest {
         assertFalse(new SwiftFindFeature(session).find(test));
         assertTrue(new SwiftFindFeature(session).find(target));
         new SwiftDeleteFeature(session).delete(Collections.<Path>singletonList(target), new DisabledLoginCallback(), new Delete.DisabledCallback());
-        session.close();
     }
 
     @Test(expected = NotfoundException.class)
     public void testMoveNotFound() throws Exception {
-        final Host host = new Host(new SwiftProtocol(), "identity.api.rackspacecloud.com", new Credentials(
-                System.getProperties().getProperty("rackspace.key"), System.getProperties().getProperty("rackspace.secret")
-        ));
-        final SwiftSession session = new SwiftSession(host);
-        session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
-        session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
-        final Path container = new Path("test-iad-cyberduck", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
         container.attributes().setRegion("IAD");
         final Path test = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
         test.attributes().setRegion("IAD");
@@ -110,5 +92,112 @@ public class SwiftMoveFeatureTest {
         assertFalse(new SwiftMoveFeature(null).isSupported(c, c));
         final Path cf = new Path("/c/f", EnumSet.of(Path.Type.directory));
         assertTrue(new SwiftMoveFeature(null).isSupported(cf, cf));
+    }
+
+    @Test
+    public void testMoveLargeObjectToSameBucket() throws Exception {
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        container.attributes().setRegion("IAD");
+        final Path originFolder = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.directory));
+        final Path sourceFile = new Path(originFolder, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
+
+        final SwiftRegionService regionService = new SwiftRegionService(session);
+        final SwiftSegmentService segmentService = new SwiftSegmentService(session, ".segments-test/");
+        prepareFile(sourceFile, regionService, segmentService);
+
+        final SwiftFindFeature findFeature = new SwiftFindFeature(session);
+        assertTrue(findFeature.find(sourceFile));
+
+        final List<Path> sourceSegments = segmentService.list(sourceFile);
+
+        final Path targetFolder = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.directory));
+        final Path targetFile = new Path(targetFolder, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
+        final Path movedFile = new SwiftMoveFeature(session, regionService).move(sourceFile, targetFile,
+            new TransferStatus(), new Delete.DisabledCallback(), new DisabledConnectionCallback());
+        // source file does not exist anymore
+        assertFalse(findFeature.find(sourceFile));
+        // moved file exists
+        assertTrue(findFeature.find(movedFile));
+
+        final List<Path> targetSegments = segmentService.list(targetFile);
+
+        assertTrue(sourceSegments.containsAll(targetSegments) && targetSegments.containsAll(sourceSegments));
+
+        new SwiftDeleteFeature(session, segmentService, regionService).delete(
+            Collections.singletonMap(targetFile, new TransferStatus()),
+            new DisabledPasswordCallback(), new Delete.DisabledCallback(), true);
+        assertFalse(findFeature.find(movedFile));
+
+        assertArrayEquals(new PathAttributes[0], targetSegments.stream().filter(p -> {
+            try {
+                return findFeature.find(movedFile);
+            }
+            catch(BackgroundException e) {
+                e.printStackTrace();
+                return false;
+            }
+        }).toArray());
+    }
+
+    @Test(expected = BackgroundException.class)
+    public void testMoveLargeObjectToDifferentBucket() throws Exception {
+        final Path container = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        container.attributes().setRegion("IAD");
+        final Path originFolder = new Path(container, UUID.randomUUID().toString(), EnumSet.of(Path.Type.directory));
+        final Path sourceFile = new Path(originFolder, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
+
+        final SwiftRegionService regionService = new SwiftRegionService(session);
+        final SwiftSegmentService segmentService = new SwiftSegmentService(session, ".segments-test/");
+        prepareFile(sourceFile, regionService, segmentService);
+
+        final SwiftFindFeature findFeature = new SwiftFindFeature(session);
+        assertTrue(findFeature.find(sourceFile));
+
+        final List<Path> sourceSegments = segmentService.list(sourceFile);
+
+        final Path targetBucket = new Path("test.cyberduck.ch", EnumSet.of(Path.Type.directory, Path.Type.volume));
+        targetBucket.attributes().setRegion("DFW");
+        final Path targetFolder = new Path(targetBucket, UUID.randomUUID().toString(), EnumSet.of(Path.Type.directory));
+        final Path targetFile = new Path(targetFolder, UUID.randomUUID().toString(), EnumSet.of(Path.Type.file));
+        final Path movedFile = new SwiftMoveFeature(session, regionService).move(sourceFile, targetFile,
+            new TransferStatus(), new Delete.DisabledCallback(), new DisabledConnectionCallback());
+        // source file does not exist anymore
+        assertFalse(findFeature.find(sourceFile));
+        // moved file exists
+        assertTrue(findFeature.find(movedFile));
+        assertTrue(sourceSegments.stream().noneMatch(p -> {
+            try {
+                return findFeature.find(p);
+            }
+            catch(BackgroundException e) {
+                return false;
+            }
+        }));
+
+        final List<Path> targetSegments = segmentService.list(targetFile);
+        assertTrue(targetSegments.size() != 0);
+
+        assertTrue(targetSegments.stream().allMatch(p -> {
+            try {
+                return findFeature.find(p);
+            }
+            catch(BackgroundException e) {
+                return false;
+            }
+        }));
+
+        new SwiftDeleteFeature(session, segmentService, regionService).delete(
+            Collections.singletonMap(targetFile, new TransferStatus()),
+            new DisabledPasswordCallback(), new Delete.DisabledCallback(), true);
+        assertFalse(findFeature.find(movedFile));
+    }
+
+    private void prepareFile(final Path path, final SwiftRegionService regionService, final SwiftSegmentService segmentService) throws BackgroundException {
+        final SwiftLargeUploadWriteFeature upload = new SwiftLargeUploadWriteFeature(session, regionService, segmentService);
+        final OutputStream out = upload.write(path, new TransferStatus(), new DisabledConnectionCallback());
+        final byte[] content = RandomUtils.nextBytes(1024 * 1024);
+        final ByteArrayInputStream in = new ByteArrayInputStream(content);
+        final TransferStatus progress = new TransferStatus();
+        new StreamCopier(new TransferStatus(), progress).transfer(in, out);
     }
 }

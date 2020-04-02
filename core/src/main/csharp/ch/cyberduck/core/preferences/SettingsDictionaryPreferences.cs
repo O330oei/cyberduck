@@ -16,17 +16,13 @@
 // feedback@cyberduck.io
 //
 
-using ch.cyberduck.core.preferences;
 using Ch.Cyberduck.Core.Editor;
 using Ch.Cyberduck.Properties;
-using java.io;
 using java.security;
 using java.util;
 using org.apache.log4j;
 using sun.security.mscapi;
 using System;
-using System.Collections.Generic;
-using System.Configuration;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -35,7 +31,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Windows.Storage;
-using File = System.IO.File;
+using StringUtils = org.apache.commons.lang3.StringUtils;
 
 namespace Ch.Cyberduck.Core.Preferences
 {
@@ -138,23 +134,23 @@ namespace Ch.Cyberduck.Core.Preferences
             return getProperty("application.language");
         }
 
-        protected override void post()
+        public override void setLogging(String level)
         {
-            base.post();
+            base.setLogging(level);
+
             Logger root = Logger.getRootLogger();
-            var fileName = Path.Combine(SupportDirectoryFinderFactory.get().find().getAbsolute(),
+            var fileName = Path.Combine(new RoamingSupportDirectoryFinder().find().getAbsolute(),
                 getProperty("application.name").ToLower().Replace(" ", "") + ".log");
             RollingFileAppender appender = new RollingFileAppender(new PatternLayout(@"%d [%t] %-5p %c - %m%n"),
                 fileName, true);
             appender.setEncoding("UTF-8");
-            appender.setMaxFileSize("10MB");
+            appender.setMaxFileSize(Level.DEBUG.ToString().Equals(level) ? "250MB" : "10MB");
             appender.setMaxBackupIndex(0);
             root.addAppender(appender);
             if (Debugger.IsAttached)
             {
                 root.setLevel(Level.DEBUG);
             }
-            ApplyGlobalConfig();
         }
 
         protected override void setDefaults()
@@ -162,19 +158,18 @@ namespace Ch.Cyberduck.Core.Preferences
             base.setDefaults();
 
             this.setDefault("application.name", Application.ProductName);
-            this.setDefault("application.container.name", Application.ProductName);
+            this.setDefault("application.datafolder.name", Application.ProductName);
+            this.setDefault("oauth.handler.scheme",
+                String.Format("x-{0}-action", StringUtils.deleteWhitespace(Application.ProductName.ToLower())));
 
             this.setDefault("application.version", ApplicationVersion);
             this.setDefault("application.revision", ApplicationRevision);
-            this.setDefault("application.language", GetDefaultLanguage());
             this.setDefault("application.language.custom", false.ToString());
             this.setDefault("application.localization.enable", true.ToString());
 
             this.setDefault("update.feed.release", "https://version.cyberduck.io/windows/changelog.rss");
             this.setDefault("update.feed.beta", "https://version.cyberduck.io/windows/beta/changelog.rss");
             this.setDefault("update.feed.nightly", "https://version.cyberduck.io/windows/nightly/changelog.rss");
-
-            this.setDefault("update.feed", "release");
 
             // Importers
             this.setDefault("bookmark.import.winscp.location",
@@ -247,10 +242,11 @@ namespace Ch.Cyberduck.Core.Preferences
             this.setDefault("ssh.knownhosts",
                 Path.Combine(new RoamingSupportDirectoryFinder().find().getAbsolute(), "known_hosts"));
             this.setDefault("browser.enterkey.rename", false.ToString());
+            this.setDefault("terminal.openssh.enable", true.ToString());
+            this.setDefault("terminal.windowssubsystemlinux.enable", true.ToString());
             this.setDefault("terminal.command.ssh", Path.Combine(HomeFolder, "putty.exe"));
             this.setDefault("terminal.command.ssh.args", "-ssh {0} {1}@{2} -t -P {3} -m \"{4}\"");
-
-            this.setDefault("editor.bundleIdentifier", new SystemWatchEditorFactory.Notepad().getIdentifier());
+            this.setDefault("terminal.command.openssh.args", "{1} {0}@{2} -t -p {3} \"cd '{4}'; $SHELL\"");
 
             this.setDefault("notifications.timeout.milliseconds", "300");
 
@@ -298,6 +294,8 @@ namespace Ch.Cyberduck.Core.Preferences
             // Override secure random strong algorithm. Outputs bytes from the Windows CryptGenRandom() API
             this.setDefault("connection.ssl.securerandom.algorithm", "Windows-PRNG");
             this.setDefault("connection.ssl.securerandom.provider", "SunMSCAPI");
+            // Set secure random algorithms for BC
+            Security.setProperty("securerandom.strongAlgorithms", "Windows-PRNG:SunMSCAPI,SHA1PRNG:SUN");
 
             // Enable Integrated Windows Authentication
             this.setDefault("connection.proxy.windows.authentication.enable", true.ToString());
@@ -331,28 +329,6 @@ namespace Ch.Cyberduck.Core.Preferences
             if (Utils.IsRunningAsUWP)
             {
                 SetUWPDefaults();
-            }
-        }
-
-        private void ApplyGlobalConfig()
-        {
-            var config = Path.Combine(SupportDirectoryFinderFactory.get().find().getAbsolute(),
-                "default.properties");
-            if (File.Exists(config))
-            {
-                try
-                {
-                    var properties = new java.util.Properties();
-                    properties.load(new FileInputStream(config));
-                    foreach (var key in Utils.ConvertFromJavaList<String>(properties.keySet()))
-                    {
-                        setProperty(key, properties.getProperty(key));
-                    }
-                }
-                catch (Exception e)
-                {
-                    Log.warn($"Failure while reading {config}", e);
-                }
             }
         }
 

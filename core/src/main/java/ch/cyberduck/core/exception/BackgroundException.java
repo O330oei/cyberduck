@@ -24,16 +24,13 @@ import ch.cyberduck.core.StringAppender;
 
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.EnumSet;
 import java.util.Objects;
 
 public class BackgroundException extends Exception {
     private static final long serialVersionUID = -6114495291207129418L;
 
-    private Path file = new Path(String.valueOf(Path.DELIMITER), EnumSet.of(Path.Type.directory));
-
+    private Path file;
     private String message;
-
     private String detail;
 
     public BackgroundException() {
@@ -75,6 +72,11 @@ public class BackgroundException extends Exception {
         this.file = file;
     }
 
+    public BackgroundException withFile(final Path file) {
+        this.file = file;
+        return this;
+    }
+
     public Path getFile() {
         return file;
     }
@@ -101,10 +103,12 @@ public class BackgroundException extends Exception {
 
     @Override
     public String toString() {
-        final StringBuilder sb = new StringBuilder(this.getClass().getName()).append("{");
-        sb.append("detail='").append(detail).append('\'');
-        sb.append(", cause='").append(this.getCause()).append('\'');
+        final StringBuilder sb = new StringBuilder("BackgroundException{");
+        sb.append("class=").append(this.getClass());
+        sb.append(", file=").append(file);
         sb.append(", message='").append(message).append('\'');
+        sb.append(", detail='").append(detail).append('\'');
+        sb.append(", cause='").append(this.getCause()).append('\'');
         sb.append('}');
         return sb.toString();
     }

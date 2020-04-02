@@ -30,7 +30,6 @@ using ch.cyberduck.core.s3;
 using ch.cyberduck.core.transfer;
 using ch.cyberduck.core.updater;
 using Ch.Cyberduck.Core;
-using Ch.Cyberduck.Ui.Winforms;
 using Ch.Cyberduck.Ui.Winforms.Controls;
 using Ch.Cyberduck.Core.Date;
 using java.util;
@@ -82,6 +81,7 @@ namespace Ch.Cyberduck.Ui.Controller
             View.TransfersToBackChangedEvent += View_TransfersToBackChangedEvent;
             View.RemoveFromTransfersChangedEvent += View_RemoveFromTransfersChangedEvent;
             View.OpenAfterDownloadChangedEvent += View_OpenAfterDownloadChangedEvent;
+            View.SegmentedDownloadsChangedEvent += View_SegmentedDownloadsChangedEvent;
             View.DownloadFolderChangedEvent += View_DownloadFolderChangedEvent;
             View.DuplicateDownloadActionChangedEvent += View_DuplicateDownloadActionChangedEvent;
             View.DuplicateUploadActionChangedEvent += View_DuplicateUploadActionChangedEvent;
@@ -161,6 +161,11 @@ namespace Ch.Cyberduck.Ui.Controller
             View.UpdateFeedChangedEvent += View_UpdateFeedChangedEvent;
 
             #endregion
+        }
+
+        private void View_SegmentedDownloadsChangedEvent()
+        {
+            PreferencesFactory.get().setProperty("queue.download.segments", View.SegmentedDownloads);
         }
 
         private void View_VerifyChecksumUploadChangedEvent()
@@ -480,6 +485,7 @@ namespace Ch.Cyberduck.Ui.Controller
         private void View_ChmodUploadChangedEvent()
         {
             PreferencesFactory.get().setProperty("queue.upload.permissions.change", View.ChmodUpload);
+            PreferencesFactory.get().setProperty("touch.permissions.change", View.ChmodUpload);
             View.ChmodUploadEnabled = View.ChmodUpload;
         }
 
@@ -784,7 +790,7 @@ namespace Ch.Cyberduck.Ui.Controller
         private void View_DefaultProtocolChangedEvent()
         {
             Protocol selected = View.DefaultProtocol;
-            PreferencesFactory.get().setProperty("connection.protocol.default", selected.getIdentifier());
+            PreferencesFactory.get().setProperty("connection.protocol.default", String.Format("{0}-{1}", selected.getIdentifier(), selected.getProvider()));
             PreferencesFactory.get().setProperty("connection.port.default", selected.getDefaultPort());
         }
 
@@ -812,7 +818,7 @@ namespace Ch.Cyberduck.Ui.Controller
 
         private void SelectDefaultBookmark(Host host)
         {
-            if (FolderBookmarkCollection.favoritesCollection().contains(host))
+            if (BookmarkCollection.defaultCollection().contains(host))
             {
                 View.DefaultBookmark = host;
             }
@@ -831,7 +837,7 @@ namespace Ch.Cyberduck.Ui.Controller
             else
             {
                 bool bookmarkFound = false;
-                foreach (Host host in FolderBookmarkCollection.favoritesCollection())
+                foreach (Host host in BookmarkCollection.defaultCollection())
                 {
                     if (nickname.Equals(host.getUuid()))
                     {
@@ -864,8 +870,8 @@ namespace Ch.Cyberduck.Ui.Controller
             View.SaveWorkspace = PreferencesFactory.get().getBoolean("browser.serialize");
             View.NewBrowserOnStartup = PreferencesFactory.get().getBoolean("browser.openUntitled");
             PopulateBookmarks();
-            FolderBookmarkCollection.favoritesCollection().addListener(this);
-            View.ViewClosedEvent += delegate { FolderBookmarkCollection.favoritesCollection().removeListener(this); };
+            BookmarkCollection.defaultCollection().addListener(this);
+            View.ViewClosedEvent += delegate { BookmarkCollection.defaultCollection().removeListener(this); };
             SelectDefaultBookmark(PreferencesFactory.get().getProperty("browser.open.bookmark.default"));
             View.ConfirmDisconnect = PreferencesFactory.get().getBoolean("browser.confirmDisconnect");
             View.UseKeychain = PreferencesFactory.get().getBoolean("connection.login.keychain");
@@ -898,6 +904,7 @@ namespace Ch.Cyberduck.Ui.Controller
             View.TransfersToFront = PreferencesFactory.get().getBoolean("queue.window.open.transfer.start");
             View.TransfersToBack = PreferencesFactory.get().getBoolean("queue.window.open.transfer.stop");
             View.RemoveFromTransfers = PreferencesFactory.get().getBoolean("queue.removeItemWhenComplete");
+            View.SegmentedDownloads = PreferencesFactory.get().getBoolean("queue.download.segments");
             View.OpenAfterDownload = PreferencesFactory.get().getBoolean("queue.download.complete.open");
             View.DownloadFolder = PreferencesFactory.get().getProperty("queue.download.folder");
             PopulateDuplicateActions();
@@ -1029,11 +1036,11 @@ namespace Ch.Cyberduck.Ui.Controller
         private void PopulateBookmarkSize()
         {
             List<KeyValuePair<int, string>> sizes = new List<KeyValuePair<int, string>>();
-            sizes.Add(new KeyValuePair<int, string>(BookmarkController.SmallBookmarkSize,
+            sizes.Add(new KeyValuePair<int, string>(BookmarkController<IBookmarkView>.SmallBookmarkSize,
                 LocaleFactory.localizedString("Use Small Icons", "Preferences")));
-            sizes.Add(new KeyValuePair<int, string>(BookmarkController.MediumBookmarkSize,
+            sizes.Add(new KeyValuePair<int, string>(BookmarkController<IBookmarkView>.MediumBookmarkSize,
                 LocaleFactory.localizedString("Use Medium Icons", "Preferences")));
-            sizes.Add(new KeyValuePair<int, string>(BookmarkController.LargeBookmarkSize,
+            sizes.Add(new KeyValuePair<int, string>(BookmarkController<IBookmarkView>.LargeBookmarkSize,
                 LocaleFactory.localizedString("Use Large Icons", "Preferences")));
             View.PopulateBookmarkSize(sizes);
         }
@@ -1054,8 +1061,12 @@ namespace Ch.Cyberduck.Ui.Controller
         {
             IList<KeyValuePair<string, string>> feeds = new List<KeyValuePair<string, string>>();
             feeds.Add(new KeyValuePair<string, string>("release", LocaleFactory.localizedString("Release")));
-            feeds.Add(new KeyValuePair<string, string>("beta", LocaleFactory.localizedString("Beta")));
-            feeds.Add(new KeyValuePair<string, string>("nightly", LocaleFactory.localizedString("Snapshot Builds")));
+            if(PreferencesFactory.get().getBoolean("update.feed.beta.enable")) {
+                feeds.Add(new KeyValuePair<string, string>("beta", LocaleFactory.localizedString("Beta")));
+            }
+            if(PreferencesFactory.get().getBoolean("update.feed.nightly.enable")) {
+                feeds.Add(new KeyValuePair<string, string>("nightly", LocaleFactory.localizedString("Snapshot Builds")));
+            }
             View.PopulateUpdateFeeds(feeds);
         }
 
@@ -1211,7 +1222,7 @@ namespace Ch.Cyberduck.Ui.Controller
                     protocol.disk()));
             }
             foreach (Protocol protocol in p.find(new DefaultProtocolPredicate(
-                    EnumSet.of(Protocol.Type.dropbox, Protocol.Type.onedrive, Protocol.Type.googledrive)))
+                    EnumSet.of(Protocol.Type.dropbox, Protocol.Type.onedrive, Protocol.Type.googledrive, Protocol.Type.nextcloud)))
                 .toArray(new Protocol[] { }))
             {
                 protocols.Add(new KeyValueIconTriple<Protocol, string>(protocol, protocol.getDescription(),
@@ -1235,7 +1246,7 @@ namespace Ch.Cyberduck.Ui.Controller
         {
             List<KeyValueIconTriple<Host, string>> bookmarks = new List<KeyValueIconTriple<Host, string>>();
             bookmarks.Add(NoneBookmark);
-            foreach (Host host in FolderBookmarkCollection.favoritesCollection())
+            foreach (Host host in BookmarkCollection.defaultCollection())
             {
                 bookmarks.Add(new KeyValueIconTriple<Host, string>(host, BookmarkNameProvider.toString(host),
                     host.getProtocol().disk()));

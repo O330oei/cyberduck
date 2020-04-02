@@ -20,26 +20,40 @@ import ch.cyberduck.binding.Outlet;
 import ch.cyberduck.binding.application.NSControl;
 import ch.cyberduck.binding.application.NSMenuItem;
 import ch.cyberduck.binding.application.NSPopUpButton;
+import ch.cyberduck.binding.application.NSSecureTextField;
 import ch.cyberduck.binding.application.NSTextField;
+import ch.cyberduck.binding.application.NSTokenField;
+import ch.cyberduck.binding.foundation.NSArray;
+import ch.cyberduck.binding.foundation.NSEnumerator;
 import ch.cyberduck.binding.foundation.NSNotification;
+import ch.cyberduck.binding.foundation.NSObject;
 import ch.cyberduck.core.BookmarkNameProvider;
+import ch.cyberduck.core.CertificateStoreFactory;
 import ch.cyberduck.core.DefaultCharsetProvider;
+import ch.cyberduck.core.DisabledCertificateIdentityCallback;
 import ch.cyberduck.core.Host;
 import ch.cyberduck.core.LocaleFactory;
 import ch.cyberduck.core.LoginOptions;
+import ch.cyberduck.core.PasswordStoreFactory;
+import ch.cyberduck.core.exception.LocalAccessDeniedException;
 import ch.cyberduck.core.ssl.KeychainX509KeyManager;
 import ch.cyberduck.ui.LoginInputValidator;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.log4j.Logger;
 import org.rococoa.Foundation;
+import org.rococoa.Rococoa;
 import org.rococoa.Selector;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.TimeZone;
 
 public class DefaultBookmarkController extends BookmarkController {
+    private static final Logger log = Logger.getLogger(DefaultBookmarkController.class);
 
     private static final String TIMEZONE_CONTINENT_PREFIXES =
         "^(Africa|America|Asia|Atlantic|Australia|Europe|Indian|Pacific)/.*";
@@ -49,22 +63,27 @@ public class DefaultBookmarkController extends BookmarkController {
     @Outlet
     private NSTextField nicknameField;
     @Outlet
+    private NSTokenField labelsField;
+    @Outlet
     private NSPopUpButton certificatePopup;
     @Outlet
     private NSPopUpButton timezonePopup;
     @Outlet
     private NSPopUpButton encodingPopup;
 
+    private final KeychainX509KeyManager x509KeyManager = new KeychainX509KeyManager(new DisabledCertificateIdentityCallback(), bookmark,
+        CertificateStoreFactory.get());
+
     public DefaultBookmarkController(final Host bookmark) {
-        this(bookmark, new LoginOptions(bookmark.getProtocol()).password(false));
+        this(bookmark, new LoginOptions(bookmark.getProtocol()));
     }
 
     public DefaultBookmarkController(final Host bookmark, final LoginOptions options) {
-        super(bookmark, bookmark.getCredentials(), options.password(false));
+        super(bookmark, options);
     }
 
     public DefaultBookmarkController(final Host bookmark, final LoginInputValidator validator, final LoginOptions options) {
-        super(bookmark, bookmark.getCredentials(), validator, options.password(false));
+        super(bookmark, validator, options);
     }
 
     @Override
@@ -73,18 +92,12 @@ public class DefaultBookmarkController extends BookmarkController {
         window.makeFirstResponder(hostField);
     }
 
-    @Override
-    public boolean validate() {
-        options.password(false);
-        return super.validate();
-    }
-
-    public void setNicknameField(final NSTextField field) {
-        this.nicknameField = field;
+    public void setNicknameField(final NSTextField f) {
+        this.nicknameField = f;
         notificationCenter.addObserver(this.id(),
             Foundation.selector("nicknameFieldDidChange:"),
             NSControl.NSControlTextDidChangeNotification,
-            field.id());
+            f.id());
         this.addObserver(new BookmarkObserver() {
             @Override
             public void change(final Host bookmark) {
@@ -97,6 +110,74 @@ public class DefaultBookmarkController extends BookmarkController {
     public void nicknameFieldDidChange(final NSNotification sender) {
         bookmark.setNickname(nicknameField.stringValue());
         this.update();
+    }
+
+    public void setLabelsField(final NSTokenField f) {
+        this.labelsField = f;
+        notificationCenter.addObserver(this.id(),
+            Foundation.selector("tokenFieldDidChange:"),
+            NSControl.NSControlTextDidEndEditingNotification,
+            f.id());
+        this.addObserver(new BookmarkObserver() {
+            @Override
+            public void change(final Host bookmark) {
+                if(bookmark.getLabels().isEmpty()) {
+                    f.setObjectValue(NSArray.array());
+                }
+                else {
+                    f.setObjectValue(NSArray.arrayWithObjects(bookmark.getLabels().toArray(new String[bookmark.getLabels().size()])));
+                }
+            }
+        });
+    }
+
+    @Action
+    public void tokenFieldDidChange(final NSNotification sender) {
+        final Set<String> labels = new HashSet<>();
+        final NSArray dict = Rococoa.cast(labelsField.objectValue(), NSArray.class);
+        final NSEnumerator i = dict.objectEnumerator();
+        NSObject next;
+        while(null != (next = i.nextObject())) {
+            labels.add(next.toString());
+        }
+        bookmark.setLabels(labels);
+        this.update();
+    }
+
+    @Override
+    public void setPasswordField(final NSSecureTextField f) {
+        super.setPasswordField(f);
+        this.notificationCenter.addObserver(this.id(),
+            Foundation.selector("passwordFieldTextDidEndEditing:"),
+            NSControl.NSControlTextDidEndEditingNotification,
+            f.id());
+    }
+
+    @Action
+    public void passwordFieldTextDidEndEditing(NSNotification notification) {
+        if(options.keychain && options.password) {
+            if(StringUtils.isBlank(bookmark.getHostname())) {
+                return;
+            }
+            if(StringUtils.isBlank(bookmark.getCredentials().getUsername())) {
+                return;
+            }
+            if(StringUtils.isBlank(passwordField.stringValue())) {
+                return;
+            }
+            try {
+                PasswordStoreFactory.get().addPassword(bookmark.getProtocol().getScheme(),
+                    bookmark.getPort(),
+                    bookmark.getHostname(),
+                    bookmark.getCredentials().getUsername(),
+                    // Remove control characters (char &lt;= 32) from both ends
+                    StringUtils.strip(passwordField.stringValue())
+                );
+            }
+            catch(LocalAccessDeniedException e) {
+                log.error(String.format("Failure saving credentials for %s in keychain. %s", bookmark, e));
+            }
+        }
     }
 
     public void setCertificatePopup(final NSPopUpButton button) {
@@ -112,13 +193,13 @@ public class DefaultBookmarkController extends BookmarkController {
                 certificatePopup.addItemWithTitle(LocaleFactory.localizedString("None"));
                 if(options.certificate) {
                     certificatePopup.menu().addItem(NSMenuItem.separatorItem());
-                    for(String certificate : new KeychainX509KeyManager(bookmark).list()) {
+                    for(String certificate : x509KeyManager.list()) {
                         certificatePopup.addItemWithTitle(certificate);
                         certificatePopup.lastItem().setRepresentedObject(certificate);
                     }
                 }
-                if(credentials.isCertificateAuthentication()) {
-                    certificatePopup.selectItemAtIndex(certificatePopup.indexOfItemWithRepresentedObject(credentials.getCertificate()));
+                if(bookmark.getCredentials().isCertificateAuthentication()) {
+                    certificatePopup.selectItemAtIndex(certificatePopup.indexOfItemWithRepresentedObject(bookmark.getCredentials().getCertificate()));
                 }
                 else {
                     certificatePopup.selectItemWithTitle(LocaleFactory.localizedString("None"));
@@ -129,7 +210,7 @@ public class DefaultBookmarkController extends BookmarkController {
 
     @Action
     public void certificateSelectionChanged(final NSPopUpButton sender) {
-        credentials.setCertificate(sender.selectedItem().representedObject());
+        bookmark.getCredentials().setCertificate(sender.selectedItem().representedObject());
         this.update();
     }
 
@@ -142,7 +223,7 @@ public class DefaultBookmarkController extends BookmarkController {
         this.timezonePopup.addItemWithTitle(UTC.getID());
         this.timezonePopup.lastItem().setRepresentedObject(UTC.getID());
         this.timezonePopup.menu().addItem(NSMenuItem.separatorItem());
-        Collections.sort(timezones, new Comparator<String>() {
+        timezones.sort(new Comparator<String>() {
             @Override
             public int compare(String o1, String o2) {
                 return TimeZone.getTimeZone(o1).getID().compareTo(TimeZone.getTimeZone(o2).getID());

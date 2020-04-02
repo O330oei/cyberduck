@@ -53,17 +53,17 @@ public class DefaultPathPredicateTest {
     @Test
     public void testIgnoreVolumeFlag() {
         assertEquals(new DefaultPathPredicate(new Path("/container", EnumSet.of(Path.Type.directory, Path.Type.volume))),
-                new DefaultPathPredicate(new Path("/container", EnumSet.of(Path.Type.directory))));
+            new DefaultPathPredicate(new Path("/container", EnumSet.of(Path.Type.directory))));
         assertEquals(new DefaultPathPredicate(new Path("/container", EnumSet.of(Path.Type.directory, Path.Type.volume))),
-                new DefaultPathPredicate(new Path("/container", EnumSet.of(Path.Type.directory, Path.Type.volume))));
+            new DefaultPathPredicate(new Path("/container", EnumSet.of(Path.Type.directory, Path.Type.volume))));
     }
 
     @Test
     public void testIgnorePlaceholderFlag() {
         assertEquals(new DefaultPathPredicate(new Path("/container/p", EnumSet.of(Path.Type.directory, Path.Type.placeholder))),
-                new DefaultPathPredicate(new Path("/container/p", EnumSet.of(Path.Type.directory))));
+            new DefaultPathPredicate(new Path("/container/p", EnumSet.of(Path.Type.directory))));
         assertEquals(new DefaultPathPredicate(new Path("/container/p", EnumSet.of(Path.Type.directory))),
-                new DefaultPathPredicate(new Path("/container/p", EnumSet.of(Path.Type.directory))));
+            new DefaultPathPredicate(new Path("/container/p", EnumSet.of(Path.Type.directory))));
     }
 
     @Test
@@ -88,5 +88,22 @@ public class DefaultPathPredicateTest {
         assertTrue(new DefaultPathPredicate(t).test(t));
         assertTrue(new DefaultPathPredicate(t).test(new Path("/f", EnumSet.of(Path.Type.directory), new PathAttributes().withVersionId("1"))));
         assertTrue(new DefaultPathPredicate(t).test(new Path("/f", EnumSet.of(Path.Type.directory), new PathAttributes().withVersionId("2"))));
+    }
+
+    @Test
+    public void testHashcodeCollision() {
+        assertNotEquals(
+            new DefaultPathPredicate(
+                new Path("19", EnumSet.of(Path.Type.file))
+            ),
+            new DefaultPathPredicate(
+                new Path("0X", EnumSet.of(Path.Type.file))
+            )
+        );
+        assertFalse(new DefaultPathPredicate(
+            new Path("19", EnumSet.of(Path.Type.file))
+        ).test(
+            new Path("0X", EnumSet.of(Path.Type.file))
+        ));
     }
 }

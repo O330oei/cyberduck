@@ -16,7 +16,6 @@ package ch.cyberduck.core.sds;
  */
 
 
-import ch.cyberduck.core.AbstractPath;
 import ch.cyberduck.core.AttributedList;
 import ch.cyberduck.core.Cache;
 import ch.cyberduck.core.DisabledListProgressListener;
@@ -24,6 +23,7 @@ import ch.cyberduck.core.ListProgressListener;
 import ch.cyberduck.core.ListService;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathAttributes;
+import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.sds.io.swagger.client.ApiException;
@@ -32,17 +32,29 @@ import ch.cyberduck.core.sds.io.swagger.client.model.Node;
 import ch.cyberduck.core.sds.io.swagger.client.model.NodeList;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.log4j.Logger;
 
 import java.util.EnumSet;
 
 public class SDSListService implements ListService {
+    private static final Logger log = Logger.getLogger(SDSListService.class);
 
     private final SDSSession session;
     private final SDSNodeIdProvider nodeid;
 
+    /**
+     * Lookup previous versions
+     */
+    private final boolean references;
+
     public SDSListService(final SDSSession session, final SDSNodeIdProvider nodeid) {
+        this(session, nodeid, PreferencesFactory.get().getBoolean("sds.versioning.references.enable"));
+    }
+
+    public SDSListService(final SDSSession session, final SDSNodeIdProvider nodeid, final boolean references) {
         this.session = session;
         this.nodeid = nodeid;
+        this.references = references;
     }
 
     @Override
@@ -53,33 +65,27 @@ public class SDSListService implements ListService {
     public AttributedList<Path> list(final Path directory, final ListProgressListener listener, final int chunksize) throws BackgroundException {
         final AttributedList<Path> children = new AttributedList<Path>();
         try {
-            Integer offset = 0;
+            int offset = 0;
             final SDSAttributesFinderFeature feature = new SDSAttributesFinderFeature(session, nodeid);
             NodeList nodes;
             do {
-                nodes = new NodesApi(session.getClient()).getFsNodes(0,
-                    Long.parseLong(nodeid.getFileid(directory, new DisabledListProgressListener())),
-                    null, null, "name:asc", offset, chunksize, StringUtils.EMPTY, null);
+                nodes = new NodesApi(session.getClient()).getFsNodes(StringUtils.EMPTY, null, 0,
+                    null, chunksize, offset, Long.parseLong(nodeid.getFileid(directory, new DisabledListProgressListener())),
+                    false, "name:asc");
                 for(Node node : nodes.getItems()) {
                     final PathAttributes attributes = feature.toAttributes(node);
-                    final EnumSet<AbstractPath.Type> type;
-                    switch(node.getType()) {
-                        case ROOM:
-                            type = EnumSet.of(Path.Type.directory, Path.Type.volume);
-                            break;
-                        case FOLDER:
-                            type = EnumSet.of(Path.Type.directory);
-                            if(node.getIsEncrypted()) {
-                                type.add(Path.Type.decrypted);
-                            }
-                            break;
-                        default:
-                            type = EnumSet.of(Path.Type.file);
-                            if(node.getIsEncrypted()) {
-                                type.add(Path.Type.decrypted);
-                            }
-                    }
+                    final EnumSet<Path.Type> type = feature.toType(node);
                     final Path file = new Path(directory, node.getName(), type, attributes);
+                    if(references && node.getCntDeletedVersions() != null && node.getCntDeletedVersions() > 0) {
+                        try {
+                            final AttributedList<Path> versions = feature.versions(file);
+                            children.addAll(versions);
+                            attributes.setVersions(versions);
+                        }
+                        catch(AccessDeniedException e) {
+                            log.warn(String.format("Ignore failure %s fetching versions for %s", e, file));
+                        }
+                    }
                     children.add(file);
                     listener.chunk(directory, children);
                 }

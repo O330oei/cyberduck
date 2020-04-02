@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="14460.31" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="15705" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
         <deployment version="1070" identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="14460.31"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="15705"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -20,7 +20,6 @@
                 <outlet property="donateButton" destination="124" id="140"/>
                 <outlet property="editBookmarkButton" destination="9" id="141"/>
                 <outlet property="editMenu" destination="71" id="142"/>
-                <outlet property="logDrawer" destination="113" id="145"/>
                 <outlet property="navigationButton" destination="63" id="146"/>
                 <outlet property="openUrlMenu" destination="95" id="147"/>
                 <outlet property="pathPopup" destination="59" id="148"/>
@@ -40,30 +39,30 @@
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
             <windowCollectionBehavior key="collectionBehavior" fullScreenPrimary="YES"/>
             <rect key="contentRect" x="67" y="115" width="601" height="451"/>
-            <rect key="screenRect" x="0.0" y="0.0" width="2560" height="1417"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1027"/>
             <value key="minSize" type="size" width="600" height="200"/>
             <view key="contentView" id="4">
                 <rect key="frame" x="0.0" y="0.0" width="601" height="451"/>
                 <autoresizingMask key="autoresizingMask"/>
                 <subviews>
-                    <tabView type="noTabsNoBorder" id="5">
+                    <tabView fixedFrame="YES" type="noTabsNoBorder" translatesAutoresizingMaskIntoConstraints="NO" id="5">
                         <rect key="frame" x="0.0" y="20" width="601" height="397"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <font key="font" metaFont="system"/>
                         <tabViewItems>
                             <tabViewItem label="Järjehoidjad" identifier="bookmarks" id="6">
-                                <view key="view" id="7">
+                                <view key="view" ambiguous="YES" id="7">
                                     <rect key="frame" x="0.0" y="0.0" width="601" height="397"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
-                                        <box boxType="oldStyle" borderType="line" titlePosition="noTitle" id="8">
+                                        <box fixedFrame="YES" boxType="oldStyle" borderType="line" titlePosition="noTitle" translatesAutoresizingMaskIntoConstraints="NO" id="8">
                                             <rect key="frame" x="-1" y="0.0" width="603" height="34"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
-                                            <view key="contentView" id="dgO-pC-QOS">
+                                            <view key="contentView" ambiguous="YES" id="dgO-pC-QOS">
                                                 <rect key="frame" x="1" y="1" width="601" height="32"/>
                                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                 <subviews>
-                                                    <button verticalHuggingPriority="750" id="9">
+                                                    <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="9">
                                                         <rect key="frame" x="37" y="5" width="23" height="22"/>
                                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                                         <buttonCell key="cell" type="smallSquare" bezelStyle="smallSquare" image="editor" imagePosition="overlaps" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="10">
@@ -71,7 +70,7 @@
                                                             <font key="font" metaFont="system"/>
                                                         </buttonCell>
                                                     </button>
-                                                    <button verticalHuggingPriority="750" id="13">
+                                                    <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="13">
                                                         <rect key="frame" x="59" y="5" width="23" height="22"/>
                                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                                         <buttonCell key="cell" type="smallSquare" bezelStyle="smallSquare" image="NSRemoveTemplate" imagePosition="overlaps" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="14">
@@ -79,7 +78,7 @@
                                                             <font key="font" metaFont="system"/>
                                                         </buttonCell>
                                                     </button>
-                                                    <button verticalHuggingPriority="750" id="11">
+                                                    <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="11">
                                                         <rect key="frame" x="15" y="5" width="23" height="22"/>
                                                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                                                         <buttonCell key="cell" type="smallSquare" bezelStyle="smallSquare" image="NSAddTemplate" imagePosition="overlaps" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="12">
@@ -90,14 +89,14 @@
                                                 </subviews>
                                             </view>
                                         </box>
-                                        <scrollView autohidesScrollers="YES" horizontalLineScroll="47" horizontalPageScroll="10" verticalLineScroll="47" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" id="15">
+                                        <scrollView fixedFrame="YES" autohidesScrollers="YES" horizontalLineScroll="47" horizontalPageScroll="10" verticalLineScroll="47" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="15">
                                             <rect key="frame" x="-1" y="32" width="603" height="365"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                            <clipView key="contentView" id="ELY-XA-KER">
+                                            <clipView key="contentView" ambiguous="YES" id="ELY-XA-KER">
                                                 <rect key="frame" x="1" y="1" width="601" height="363"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                                 <subviews>
-                                                    <tableView focusRingType="none" verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="sequential" columnSelection="YES" columnResizing="NO" multipleSelection="NO" autosaveColumns="NO" rowHeight="45" id="17" customClass="CDListView">
+                                                    <tableView focusRingType="none" verticalHuggingPriority="750" ambiguous="YES" allowsExpansionToolTips="YES" columnAutoresizingStyle="sequential" columnSelection="YES" columnResizing="NO" multipleSelection="NO" autosaveColumns="NO" rowHeight="45" id="17" customClass="CDListView">
                                                         <rect key="frame" x="0.0" y="0.0" width="601" height="363"/>
                                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                         <size key="intercellSpacing" width="3" height="2"/>
@@ -109,11 +108,11 @@
                                                     </tableView>
                                                 </subviews>
                                             </clipView>
-                                            <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" controlSize="small" horizontal="YES" id="18">
+                                            <scroller key="horizontalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" controlSize="small" horizontal="YES" id="18">
                                                 <rect key="frame" x="-100" y="-100" width="255" height="11"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
-                                            <scroller key="verticalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="NO" id="19">
+                                            <scroller key="verticalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="19">
                                                 <rect key="frame" x="-22" y="1" width="15" height="431"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
@@ -121,7 +120,7 @@
                                                 <outlet property="nextKeyView" destination="55" id="161"/>
                                             </connections>
                                         </scrollView>
-                                        <progressIndicator horizontalHuggingPriority="750" verticalHuggingPriority="750" minValue="16" maxValue="100" doubleValue="16" displayedWhenStopped="NO" bezeled="NO" indeterminate="YES" style="spinning" id="28">
+                                        <progressIndicator horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" minValue="16" maxValue="100" doubleValue="16" displayedWhenStopped="NO" bezeled="NO" indeterminate="YES" style="spinning" translatesAutoresizingMaskIntoConstraints="NO" id="28">
                                             <rect key="frame" x="284" y="184" width="32" height="32"/>
                                             <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMinY="YES" flexibleMaxY="YES"/>
                                         </progressIndicator>
@@ -133,15 +132,15 @@
                                     <rect key="frame" x="0.0" y="0.0" width="601" height="397"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
-                                        <scrollView horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" id="31">
+                                        <scrollView fixedFrame="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="31">
                                             <rect key="frame" x="-2" y="0.0" width="604" height="397"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                            <clipView key="contentView" id="t14-pG-1DQ">
-                                                <rect key="frame" x="1" y="0.0" width="587" height="396"/>
+                                            <clipView key="contentView" ambiguous="YES" id="t14-pG-1DQ">
+                                                <rect key="frame" x="1" y="0.0" width="602" height="396"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                                 <subviews>
-                                                    <tableView focusRingType="none" verticalHuggingPriority="750" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" autosaveName="ListBrowserView" headerView="36" id="33" customClass="CDListView">
-                                                        <rect key="frame" x="0.0" y="0.0" width="587" height="379"/>
+                                                    <tableView focusRingType="none" verticalHuggingPriority="750" ambiguous="YES" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" autosaveName="ListBrowserView" headerView="36" id="33" customClass="CDListView">
+                                                        <rect key="frame" x="0.0" y="0.0" width="602" height="379"/>
                                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                         <size key="intercellSpacing" width="3" height="2"/>
                                                         <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -152,16 +151,16 @@
                                                     </tableView>
                                                 </subviews>
                                             </clipView>
-                                            <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="34">
+                                            <scroller key="horizontalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="34">
                                                 <rect key="frame" x="-100" y="-100" width="582" height="15"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
-                                            <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="35">
-                                                <rect key="frame" x="588" y="17" width="15" height="379"/>
+                                            <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="35">
+                                                <rect key="frame" x="587" y="25" width="16" height="371"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
                                             <tableHeaderView key="headerView" id="36">
-                                                <rect key="frame" x="0.0" y="0.0" width="587" height="17"/>
+                                                <rect key="frame" x="0.0" y="0.0" width="602" height="25"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </tableHeaderView>
                                         </scrollView>
@@ -173,15 +172,15 @@
                                     <rect key="frame" x="0.0" y="0.0" width="601" height="397"/>
                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                     <subviews>
-                                        <scrollView horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" id="39">
+                                        <scrollView fixedFrame="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" hasHorizontalScroller="NO" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="39">
                                             <rect key="frame" x="-2" y="0.0" width="604" height="397"/>
                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                            <clipView key="contentView" id="KUj-N5-PnR">
-                                                <rect key="frame" x="1" y="0.0" width="587" height="396"/>
+                                            <clipView key="contentView" ambiguous="YES" id="KUj-N5-PnR">
+                                                <rect key="frame" x="1" y="0.0" width="602" height="396"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                                 <subviews>
-                                                    <tableView focusRingType="none" verticalHuggingPriority="750" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" autosaveName="OutlineBrowserView" headerView="44" id="41" customClass="CDOutlineView">
-                                                        <rect key="frame" x="0.0" y="0.0" width="587" height="379"/>
+                                                    <tableView focusRingType="none" verticalHuggingPriority="750" ambiguous="YES" allowsExpansionToolTips="YES" alternatingRowBackgroundColors="YES" columnSelection="YES" autosaveName="OutlineBrowserView" headerView="44" id="41" customClass="CDOutlineView">
+                                                        <rect key="frame" x="0.0" y="0.0" width="602" height="379"/>
                                                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                         <size key="intercellSpacing" width="3" height="2"/>
                                                         <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -193,16 +192,16 @@
                                                     </tableView>
                                                 </subviews>
                                             </clipView>
-                                            <scroller key="horizontalScroller" hidden="YES" verticalHuggingPriority="750" horizontal="YES" id="42">
+                                            <scroller key="horizontalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="42">
                                                 <rect key="frame" x="-100" y="-100" width="582" height="15"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
-                                            <scroller key="verticalScroller" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="43">
-                                                <rect key="frame" x="588" y="17" width="15" height="379"/>
+                                            <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" doubleValue="1" horizontal="NO" id="43">
+                                                <rect key="frame" x="587" y="25" width="16" height="371"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </scroller>
                                             <tableHeaderView key="headerView" id="44">
-                                                <rect key="frame" x="0.0" y="0.0" width="587" height="17"/>
+                                                <rect key="frame" x="0.0" y="0.0" width="602" height="25"/>
                                                 <autoresizingMask key="autoresizingMask"/>
                                             </tableHeaderView>
                                         </scrollView>
@@ -211,15 +210,15 @@
                             </tabViewItem>
                         </tabViewItems>
                     </tabView>
-                    <customView id="45">
+                    <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="45">
                         <rect key="frame" x="0.0" y="0.0" width="603" height="20"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
                         <subviews>
-                            <progressIndicator horizontalHuggingPriority="750" verticalHuggingPriority="750" maxValue="100" displayedWhenStopped="NO" bezeled="NO" indeterminate="YES" controlSize="small" style="spinning" id="46">
+                            <progressIndicator horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" maxValue="100" displayedWhenStopped="NO" bezeled="NO" indeterminate="YES" controlSize="small" style="spinning" translatesAutoresizingMaskIntoConstraints="NO" id="46">
                                 <rect key="frame" x="8" y="2" width="16" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                             </progressIndicator>
-                            <button id="47">
+                            <button fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="47">
                                 <rect key="frame" x="562" y="2" width="18" height="18"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
                                 <buttonCell key="cell" type="squareTextured" bezelStyle="texturedSquare" image="buttonCell:48:image" imagePosition="only" alignment="left" id="48">
@@ -227,26 +226,26 @@
                                     <font key="font" metaFont="label"/>
                                 </buttonCell>
                             </button>
-                            <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" allowsCharacterPickerTouchBarItem="YES" id="49">
+                            <textField verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" fixedFrame="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="49">
                                 <rect key="frame" x="29" y="3" width="528" height="14"/>
                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
                                 <textFieldCell key="cell" sendsActionOnEndEditing="YES" alignment="left" id="50">
-                                    <font key="font" metaFont="smallSystem"/>
+                                    <font key="font" metaFont="message" size="11"/>
                                     <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
                         </subviews>
                     </customView>
-                    <customView id="51">
+                    <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="51">
                         <rect key="frame" x="0.0" y="416" width="603" height="35"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
                         <subviews>
-                            <box verticalHuggingPriority="750" boxType="separator" id="52">
+                            <box verticalHuggingPriority="750" fixedFrame="YES" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="52">
                                 <rect key="frame" x="0.0" y="-2" width="603" height="5"/>
                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
                             </box>
-                            <searchField wantsLayer="YES" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="55">
+                            <searchField wantsLayer="YES" verticalHuggingPriority="750" fixedFrame="YES" allowsCharacterPickerTouchBarItem="YES" translatesAutoresizingMaskIntoConstraints="NO" id="55">
                                 <rect key="frame" x="469" y="7" width="124" height="22"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMinY="YES"/>
                                 <searchFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" borderStyle="bezel" bezelStyle="round" id="56">
@@ -255,7 +254,7 @@
                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </searchFieldCell>
                             </searchField>
-                            <segmentedControl verticalHuggingPriority="750" id="57">
+                            <segmentedControl verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="57">
                                 <rect key="frame" x="423" y="5" width="41" height="24"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMinY="YES"/>
                                 <segmentedCell key="cell" borderStyle="border" alignment="left" style="rounded" trackingMode="momentary" id="58">
@@ -265,7 +264,7 @@
                                     </segments>
                                 </segmentedCell>
                             </segmentedControl>
-                            <segmentedControl verticalHuggingPriority="750" id="63">
+                            <segmentedControl verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="63">
                                 <rect key="frame" x="158" y="5" width="77" height="24"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <segmentedCell key="cell" borderStyle="border" alignment="left" style="rounded" trackingMode="momentary" id="64">
@@ -276,8 +275,8 @@
                                     </segments>
                                 </segmentedCell>
                             </segmentedControl>
-                            <popUpButton verticalHuggingPriority="750" id="59">
-                                <rect key="frame" x="238" y="4" width="183" height="26"/>
+                            <popUpButton verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="59">
+                                <rect key="frame" x="238" y="4" width="183" height="25"/>
                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
                                 <popUpButtonCell key="cell" type="push" title=" " bezelStyle="rounded" alignment="left" lineBreakMode="truncatingMiddle" state="on" borderStyle="borderAndBezel" inset="2" arrowPosition="arrowAtCenter" preferredEdge="maxY" selectedItem="62" id="60">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -289,7 +288,7 @@
                                     </menu>
                                 </popUpButtonCell>
                             </popUpButton>
-                            <segmentedControl verticalHuggingPriority="750" id="53">
+                            <segmentedControl verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="53">
                                 <rect key="frame" x="6" y="5" width="149" height="24"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <segmentedCell key="cell" borderStyle="border" alignment="left" style="rounded" trackingMode="selectOne" id="54">
@@ -306,6 +305,7 @@
                     </customView>
                 </subviews>
             </view>
+            <point key="canvasLocation" x="132" y="147"/>
         </window>
         <menu title="Menüü" id="65">
             <items>
@@ -316,63 +316,6 @@
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="67">
                     <modifierMask key="keyEquivalentModifierMask" command="YES"/>
-                </menuItem>
-                <menuItem title="Info" keyEquivalent="i" id="68">
-                    <connections>
-                        <action selector="infoButtonClicked:" target="-1" id="163"/>
-                    </connections>
-                </menuItem>
-                <menuItem title="Kiirvaade" image="NSQuickLookTemplate" id="69">
-                    <attributedString key="attributedTitle"/>
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <connections>
-                        <action selector="quicklookButtonClicked:" target="-1" id="185"/>
-                    </connections>
-                </menuItem>
-                <menuItem title="Muuda rakendusega" id="70">
-                    <menu key="submenu" title="Muuda rakendusega" id="71"/>
-                </menuItem>
-                <menuItem title="Nimeta ümber..." id="72">
-                    <connections>
-                        <action selector="renameFileButtonClicked:" target="-1" id="176"/>
-                    </connections>
-                </menuItem>
-                <menuItem title="Tee koopia..." keyEquivalent="d" id="73">
-                    <connections>
-                        <action selector="duplicateFileButtonClicked:" target="-1" id="175"/>
-                    </connections>
-                </menuItem>
-                <menuItem isSeparatorItem="YES" id="74"/>
-                <menuItem title="Laadi alla" keyEquivalent="" id="75">
-                    <modifierMask key="keyEquivalentModifierMask" option="YES"/>
-                    <connections>
-                        <action selector="downloadButtonClicked:" target="-1" id="164"/>
-                    </connections>
-                </menuItem>
-                <menuItem title="Laadi alla kui..." keyEquivalent="" id="76">
-                    <modifierMask key="keyEquivalentModifierMask" shift="YES" option="YES"/>
-                    <connections>
-                        <action selector="downloadAsButtonClicked:" target="-1" id="168"/>
-                    </connections>
-                </menuItem>
-                <menuItem title="Laadi alla kausta..." id="77">
-                    <connections>
-                        <action selector="downloadToButtonClicked:" target="-1" id="177"/>
-                    </connections>
-                </menuItem>
-                <menuItem isSeparatorItem="YES" id="78">
-                    <modifierMask key="keyEquivalentModifierMask" command="YES"/>
-                </menuItem>
-                <menuItem title="Laadi üles..." keyEquivalent="" id="79">
-                    <modifierMask key="keyEquivalentModifierMask" option="YES"/>
-                    <connections>
-                        <action selector="uploadButtonClicked:" target="-1" id="174"/>
-                    </connections>
-                </menuItem>
-                <menuItem title="Sünkrooni..." id="80">
-                    <connections>
-                        <action selector="syncButtonClicked:" target="-1" id="172"/>
-                    </connections>
                 </menuItem>
                 <menuItem title="Uus kaust..." keyEquivalent="N" id="81">
                     <connections>
@@ -397,6 +340,64 @@
                     </connections>
                 </menuItem>
                 <menuItem isSeparatorItem="YES" id="84"/>
+                <menuItem title="Info" keyEquivalent="i" id="68">
+                    <connections>
+                        <action selector="infoButtonClicked:" target="-1" id="163"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Kiirvaade" image="NSQuickLookTemplate" id="69">
+                    <attributedString key="attributedTitle"/>
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <connections>
+                        <action selector="quicklookButtonClicked:" target="-1" id="185"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Muuda rakendusega" id="70">
+                    <menu key="submenu" title="Muuda rakendusega" id="71"/>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="74"/>
+                <menuItem title="Nimeta ümber..." id="72">
+                    <connections>
+                        <action selector="renameFileButtonClicked:" target="-1" id="176"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Tee koopia..." keyEquivalent="d" id="73">
+                    <connections>
+                        <action selector="duplicateFileButtonClicked:" target="-1" id="175"/>
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="U9L-O8-fnA"/>
+                <menuItem title="Laadi alla" keyEquivalent="" id="75">
+                    <modifierMask key="keyEquivalentModifierMask" option="YES"/>
+                    <connections>
+                        <action selector="downloadButtonClicked:" target="-1" id="164"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Laadi alla kui..." keyEquivalent="" id="76">
+                    <modifierMask key="keyEquivalentModifierMask" shift="YES" option="YES"/>
+                    <connections>
+                        <action selector="downloadAsButtonClicked:" target="-1" id="168"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Laadi alla kausta..." id="77">
+                    <connections>
+                        <action selector="downloadToButtonClicked:" target="-1" id="177"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Laadi üles..." keyEquivalent="" id="79">
+                    <modifierMask key="keyEquivalentModifierMask" option="YES"/>
+                    <connections>
+                        <action selector="uploadButtonClicked:" target="-1" id="174"/>
+                    </connections>
+                </menuItem>
+                <menuItem title="Sünkrooni..." id="80">
+                    <connections>
+                        <action selector="syncButtonClicked:" target="-1" id="172"/>
+                    </connections>
+                </menuItem>
+                <menuItem isSeparatorItem="YES" id="78">
+                    <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                </menuItem>
                 <menuItem title="Kustuta" id="85">
                     <string key="keyEquivalent" base64-UTF8="YES">
 CA
@@ -433,6 +434,11 @@ CA
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Ava URL" id="95"/>
                 </menuItem>
+                <menuItem title="Jaga..." id="NBw-Mh-zlT">
+                    <connections>
+                        <action selector="shareFileButtonClicked:" target="-1" id="iI0-ew-cyt"/>
+                    </connections>
+                </menuItem>
                 <menuItem isSeparatorItem="YES" id="96">
                     <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                 </menuItem>
@@ -447,7 +453,7 @@ CA
                     </connections>
                 </menuItem>
             </items>
-            <point key="canvasLocation" x="-184.5" y="588.5"/>
+            <point key="canvasLocation" x="-367" y="582"/>
         </menu>
         <menu title="Menüü" id="99">
             <items>
@@ -512,26 +518,18 @@ DQ
                 </menuItem>
             </items>
         </menu>
-        <drawer preferredEdge="minY" leadingOffset="10" trailingOffset="15" id="113">
-            <size key="contentSize" width="200" height="200"/>
-            <size key="minContentSize" width="50" height="50"/>
-            <size key="maxContentSize" width="600" height="800"/>
-            <connections>
-                <outlet property="parentWindow" destination="3" id="160"/>
-            </connections>
-        </drawer>
         <button verticalHuggingPriority="750" id="124">
             <rect key="frame" x="0.0" y="0.0" width="123" height="19"/>
             <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMinY="YES"/>
             <buttonCell key="cell" type="roundRect" bezelStyle="roundedRect" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="125">
                 <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
-                <font key="font" metaFont="smallSystem"/>
+                <font key="font" metaFont="message" size="11"/>
             </buttonCell>
         </button>
     </objects>
     <resources>
         <image name="NSAddTemplate" width="11" height="11"/>
-        <image name="NSBonjour" width="128" height="128"/>
+        <image name="NSBonjour" width="32" height="32"/>
         <image name="NSQuickLookTemplate" width="19" height="12"/>
         <image name="NSRemoveTemplate" width="11" height="11"/>
         <image name="bookmarks" width="16" height="16"/>

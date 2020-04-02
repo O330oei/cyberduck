@@ -37,7 +37,7 @@ namespace Ch.Cyberduck.Core
     {
         private static readonly Logger Log = Logger.getLogger(typeof(SystemCertificateStore).FullName);
 
-        public X509Certificate choose(string[] keyTypes, Principal[] issuers, Host bookmark, string prompt)
+        public X509Certificate choose(CertificateIdentityCallback prompt, string[] keyTypes, Principal[] issuers, Host bookmark)
         {
             X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
             try
@@ -65,7 +65,9 @@ namespace Ch.Cyberduck.Core
                 if (found.Count > 0)
                 {
                     X509Certificate2Collection selected = X509Certificate2UI.SelectFromCollection(found,
-                        LocaleFactory.localizedString("Choose"), prompt, X509SelectionFlag.SingleSelection);
+                        LocaleFactory.localizedString("Choose"), string.Format(LocaleFactory.localizedString(
+                             "The server requires a certificate to validate your identity. Select the certificate to authenticate yourself to {0}."),
+                             bookmark.getHostname()), X509SelectionFlag.SingleSelection);
                     foreach (X509Certificate2 c in selected)
                     {
                         return ConvertCertificate(c);
@@ -79,18 +81,7 @@ namespace Ch.Cyberduck.Core
             }
         }
 
-        public bool display(List certificates)
-        {
-            if (certificates.isEmpty())
-            {
-                return false;
-            }
-            X509Certificate2 cert = ConvertCertificate(certificates.iterator().next() as X509Certificate);
-            X509Certificate2UI.DisplayCertificate(cert);
-            return true;
-        }
-
-        public bool isTrusted(String hostName, List certs)
+        public bool verify(CertificateTrustCallback prompt, String hostName, List certs)
         {
             X509Certificate2 serverCert = ConvertCertificate(certs.iterator().next() as X509Certificate);
             X509Chain chain = new X509Chain();
@@ -110,7 +101,7 @@ namespace Ch.Cyberduck.Core
             bool isException = CheckForException(hostName, serverCert);
             if (isException)
             {
-                // Exceptions always have precendence
+                // Exceptions always have precedence
                 return true;
             }
 
@@ -124,15 +115,15 @@ namespace Ch.Cyberduck.Core
             if (null == errorFromChainStatus && hostnameMismatch)
             {
                 errorFromChainStatus =
-                    LocaleFactory.localizedString(
-                        "The certificate for this server is invalid. You might be connecting to a server that is pretending to be “%@” which could put your confidential information at risk. Would you like to connect to the server anyway?",
-                        "Keychain").Replace("%@", hostName);
+                    string.Format(LocaleFactory.localizedString(
+                        "The certificate for this server is invalid. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?",
+                        "Keychain"), hostName);
             }
 
             if (null != errorFromChainStatus)
             {
-                // Title: LocaleFactory.localizedString("This certificate is not valid", "Keychain")
-                // Main Instruction: LocaleFactory.localizedString("This certificate is not valid", "Keychain")
+                // Title: LocaleFactory.localizedString("Certificate Error", "Keychain")
+                // Main Instruction: LocaleFactory.localizedString("Certificate Error", "Keychain")
                 // Content: errorFromChainStatus
                 // Verification Text: LocaleFactory.localizedString("Always Trust", "Keychain")
                 // CommandButtons: { LocaleFactory.localizedString("Continue", "Credentials"), LocaleFactory.localizedString("Disconnect"), LocaleFactory.localizedString("Show Certificate", "Keychain") }
@@ -142,8 +133,8 @@ namespace Ch.Cyberduck.Core
 
                 TaskDialogResult result =
                     TaskDialog.TaskDialog.Show(
-                        title: LocaleFactory.localizedString("This certificate is not valid", "Keychain"),
-                        mainInstruction: LocaleFactory.localizedString("This certificate is not valid", "Keychain"),
+                        title: LocaleFactory.localizedString("Certificate Error", "Keychain"),
+                        mainInstruction: LocaleFactory.localizedString("Certificate Error", "Keychain"),
                         verificationText: LocaleFactory.localizedString("Always Trust", "Keychain"),
                         content: errorFromChainStatus,
                         commandLinks:
@@ -181,7 +172,7 @@ namespace Ch.Cyberduck.Core
                                 AddCertificate(serverCert, StoreName.Root);
                             }
                             PreferencesFactory.get()
-                                .setProperty(hostName + ".certificate.accept", serverCert.SubjectName.Name);
+                                .setProperty(hostName + ".certificate.accept", serverCert.Thumbprint);
                         }
                         return true;
                     }
@@ -244,7 +235,7 @@ namespace Ch.Cyberduck.Core
             string accCert = PreferencesFactory.get().getProperty(hostname + ".certificate.accept");
             if (Utils.IsNotBlank(accCert))
             {
-                return accCert.Equals(cert.SubjectName.Name);
+                return accCert.Equals(cert.Thumbprint);
             }
             return false;
         }
@@ -266,9 +257,9 @@ namespace Ch.Cyberduck.Core
                 {
                     //certificate is expired, CSSM_CERT_STATUS_EXPIRED
                     error =
-                        LocaleFactory.localizedString(
-                            "The certificate for this server has expired. You might be connecting to a server that is pretending to be “%@” which could put your confidential information at risk. Would you like to connect to the server anyway?",
-                            "Keychain").Replace("%@", hostName);
+                        string.Format(LocaleFactory.localizedString(
+                            "The certificate for this server has expired. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?",
+                            "Keychain"), hostName);
                     return error;
                 }
                 if (((status.Status & X509ChainStatusFlags.UntrustedRoot) == X509ChainStatusFlags.UntrustedRoot) ||
@@ -276,18 +267,18 @@ namespace Ch.Cyberduck.Core
                 {
                     // untrusted self-signed, !CSSM_CERT_STATUS_IS_IN_ANCHORS && CSSM_CERT_STATUS_IS_ROOT
                     error =
-                        LocaleFactory.localizedString(
-                            "The certificate for this server was signed by an unknown certifying authority. You might be connecting to a server that is pretending to be “%@” which could put your confidential information at risk. Would you like to connect to the server anyway?",
-                            "Keychain").Replace("%@", hostName);
+                        string.Format(LocaleFactory.localizedString(
+                            "The certificate for this server was signed by an unknown certifying authority. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?",
+                            "Keychain"), hostName);
                     return error;
                 }
 
                 //all other errors we map to !CSSM_CERT_STATUS_IS_IN_ANCHORS
                 Log.debug("Certificate error" + status.StatusInformation);
                 error =
-                    LocaleFactory.localizedString(
-                        "The certificate for this server is invalid. You might be connecting to a server that is pretending to be “%@” which could put your confidential information at risk. Would you like to connect to the server anyway?",
-                        "Keychain").Replace("%@", hostName);
+                    string.Format(LocaleFactory.localizedString(
+                        "The certificate for this server is invalid. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?",
+                        "Keychain"), hostName);
             }
             return error;
         }

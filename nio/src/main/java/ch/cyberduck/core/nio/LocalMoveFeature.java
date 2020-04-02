@@ -19,6 +19,7 @@ import ch.cyberduck.core.ConnectionCallback;
 import ch.cyberduck.core.DisabledPasswordCallback;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.exception.BackgroundException;
+import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.features.Delete;
 import ch.cyberduck.core.features.Move;
 import ch.cyberduck.core.transfer.TransferStatus;
@@ -36,8 +37,11 @@ public class LocalMoveFeature implements Move {
 
     @Override
     public Path move(final Path file, final Path renamed, final TransferStatus status, final Delete.Callback callback, final ConnectionCallback connectionCallback) throws BackgroundException {
+        if(!new LocalFindFeature(session).find(file)) {
+            throw new NotfoundException(file.getAbsolute());
+        }
         if(status.isExists()) {
-            new LocalDeleteFeature(session).delete(Collections.singletonList(renamed), new DisabledPasswordCallback(), callback);
+            new LocalDeleteFeature(session).delete(Collections.singletonMap(renamed, status), new DisabledPasswordCallback(), callback);
         }
         if(!session.toPath(file).toFile().renameTo(session.toPath(renamed).toFile())) {
             throw new LocalExceptionMappingService().map("Cannot rename {0}", new NoSuchFileException(file.getName()), file);
@@ -50,11 +54,6 @@ public class LocalMoveFeature implements Move {
     @Override
     public boolean isRecursive(final Path source, final Path target) {
         return true;
-    }
-
-    @Override
-    public Move withDelete(final Delete delete) {
-        return this;
     }
 
 }

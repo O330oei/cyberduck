@@ -18,10 +18,23 @@ package ch.cyberduck.core.cloudfront;
  * dkocher@cyberduck.ch
  */
 
-import ch.cyberduck.core.*;
+import ch.cyberduck.core.AlphanumericRandomStringService;
+import ch.cyberduck.core.DescriptiveUrlBag;
+import ch.cyberduck.core.DisabledListProgressListener;
+import ch.cyberduck.core.Host;
+import ch.cyberduck.core.KeychainLoginService;
+import ch.cyberduck.core.LocaleFactory;
+import ch.cyberduck.core.LoginCallback;
+import ch.cyberduck.core.LoginOptions;
+import ch.cyberduck.core.LoginService;
+import ch.cyberduck.core.PasswordStoreFactory;
+import ch.cyberduck.core.Path;
+import ch.cyberduck.core.PathContainerService;
+import ch.cyberduck.core.Scheme;
 import ch.cyberduck.core.analytics.AnalyticsProvider;
 import ch.cyberduck.core.analytics.QloudstatAnalyticsProvider;
 import ch.cyberduck.core.auth.AWSCredentialsConfigurator;
+import ch.cyberduck.core.aws.CustomClientConfiguration;
 import ch.cyberduck.core.cdn.Distribution;
 import ch.cyberduck.core.cdn.DistributionConfiguration;
 import ch.cyberduck.core.cdn.DistributionUrlProvider;
@@ -39,12 +52,13 @@ import ch.cyberduck.core.iam.AmazonServiceExceptionMappingService;
 import ch.cyberduck.core.identity.IdentityConfiguration;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
-import ch.cyberduck.core.proxy.Proxy;
-import ch.cyberduck.core.proxy.ProxyFactory;
 import ch.cyberduck.core.s3.S3BucketListService;
 import ch.cyberduck.core.s3.S3LocationFeature;
 import ch.cyberduck.core.s3.S3Protocol;
 import ch.cyberduck.core.s3.S3Session;
+import ch.cyberduck.core.ssl.ThreadLocalHostnameDelegatingTrustManager;
+import ch.cyberduck.core.ssl.X509KeyManager;
+import ch.cyberduck.core.ssl.X509TrustManager;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
@@ -83,29 +97,20 @@ public class CloudFrontDistributionConfiguration implements DistributionConfigur
     private final ClientConfiguration configuration;
     private final Location locationFeature;
 
+    private final X509TrustManager trust;
+    private final X509KeyManager key;
     private final Map<Path, Distribution> distributions;
 
-    public CloudFrontDistributionConfiguration(final S3Session session, final Map<Path, Distribution> distributions) {
+    public CloudFrontDistributionConfiguration(final S3Session session, final X509TrustManager trust, final X509KeyManager key,
+                                               final Map<Path, Distribution> distributions) {
         this.session = session;
         this.bookmark = session.getHost();
+        this.trust = trust;
+        this.key = key;
         this.distributions = distributions;
-        final int timeout = preferences.getInteger("connection.timeout.seconds") * 1000;
-        configuration = new ClientConfiguration();
-        configuration.setConnectionTimeout(timeout);
-        configuration.setSocketTimeout(timeout);
-        final UseragentProvider ua = new PreferencesUseragentProvider();
-        configuration.setUserAgentPrefix(ua.get());
-        configuration.setMaxErrorRetry(0);
-        configuration.setMaxConnections(1);
-        configuration.setUseGzip(preferences.getBoolean("http.compression.enable"));
-        final Proxy proxy = ProxyFactory.get().find(bookmark);
-        switch(proxy.getType()) {
-            case HTTP:
-            case HTTPS:
-                configuration.setProxyHost(proxy.getHostname());
-                configuration.setProxyPort(proxy.getPort());
-        }
-        locationFeature = session.getFeature(Location.class);
+        this.configuration = new CustomClientConfiguration(bookmark,
+            new ThreadLocalHostnameDelegatingTrustManager(trust, bookmark.getHostname()), key);
+        this.locationFeature = session.getFeature(Location.class);
     }
 
     private interface Authenticated<T> extends Callable<T> {
@@ -305,7 +310,7 @@ public class CloudFrontDistributionConfiguration implements DistributionConfigur
             return (T) this;
         }
         if(type == IdentityConfiguration.class) {
-            return (T) new AmazonIdentityConfiguration(bookmark);
+            return (T) new AmazonIdentityConfiguration(bookmark, trust, key);
         }
         return null;
     }

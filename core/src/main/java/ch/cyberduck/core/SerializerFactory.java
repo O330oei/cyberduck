@@ -22,13 +22,15 @@ import ch.cyberduck.core.serializer.Serializer;
 
 public class SerializerFactory extends Factory<Serializer> {
 
-    private static final SerializerFactory factory = new SerializerFactory();
-
     public SerializerFactory() {
         super("factory.serializer.class");
     }
 
+    public SerializerFactory(final Class<Serializer> impl) {
+        super(impl);
+    }
+
     public static Serializer get() {
-        return factory.create();
+        return new SerializerFactory().create();
     }
 }

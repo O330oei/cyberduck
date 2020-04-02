@@ -15,7 +15,6 @@ package ch.cyberduck.core.sds;
  * GNU General Public License for more details.
  */
 
-import ch.cyberduck.core.AbstractPath;
 import ch.cyberduck.core.AttributedList;
 import ch.cyberduck.core.Cache;
 import ch.cyberduck.core.Filter;
@@ -28,6 +27,7 @@ import ch.cyberduck.core.sds.io.swagger.client.ApiException;
 import ch.cyberduck.core.sds.io.swagger.client.api.NodesApi;
 import ch.cyberduck.core.sds.io.swagger.client.model.Node;
 import ch.cyberduck.core.sds.io.swagger.client.model.NodeList;
+import ch.cyberduck.core.unicode.NFCNormalizer;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -48,13 +48,12 @@ public class SDSSearchFeature implements Search {
         try {
             final AttributedList<Path> result = new AttributedList<>();
             final NodeList list = new NodesApi(session.getClient()).searchFsNodes(
-                String.format("*%s*", regex.toPattern().pattern()),
-                -1, Long.valueOf(nodeid.getFileid(workdir, listener)), null,
-                null, null, null, StringUtils.EMPTY, null);
+                String.format("*%s*", new NFCNormalizer().normalize(regex.toPattern().pattern())), StringUtils.EMPTY, null,
+                -1, null, null, null, Long.valueOf(nodeid.getFileid(workdir, listener)), null);
             final SDSAttributesFinderFeature feature = new SDSAttributesFinderFeature(session, nodeid);
             for(Node node : list.getItems()) {
                 final PathAttributes attributes = feature.toAttributes(node);
-                final EnumSet<AbstractPath.Type> type;
+                final EnumSet<Path.Type> type;
                 switch(node.getType()) {
                     case ROOM:
                         type = EnumSet.of(Path.Type.directory, Path.Type.volume);

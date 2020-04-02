@@ -35,9 +35,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.rococoa.Foundation;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -53,11 +50,6 @@ public class FinderLocal extends Local {
     }
 
     private final FilesystemBookmarkResolver<NSURL> resolver;
-
-    /**
-     * Application scoped bookmark to access outside of sandbox
-     */
-    private String bookmark;
 
     public FinderLocal(final Local parent, final String name) {
         this(parent, name, FilesystemBookmarkResolverFactory.get());
@@ -89,11 +81,6 @@ public class FinderLocal extends Local {
     @Override
     public <T> T serialize(final Serializer dict) {
         dict.setStringForKey(this.getAbbreviatedPath(), "Path");
-        // Get or create application scope bookmark
-        final String bookmark = this.getBookmark();
-        if(StringUtils.isNotBlank(bookmark)) {
-            dict.setStringForKey(bookmark, String.format("%s Bookmark", PreferencesFactory.get().getProperty("application.name")));
-        }
         return dict.getSerialized();
     }
 
@@ -145,14 +132,19 @@ public class FinderLocal extends Local {
         }
     }
 
+    /**
+     * @return Application scoped bookmark to access outside of sandbox
+     */
     @Override
     public String getBookmark() {
+        final String path = this.getAbbreviatedPath();
+        String bookmark = PreferencesFactory.get().getProperty(String.format("local.bookmark.%s", path));
         if(StringUtils.isBlank(bookmark)) {
             try {
                 bookmark = resolver.create(this);
             }
             catch(AccessDeniedException e) {
-                log.warn(String.format("Failure resolving bookmark for %s. %s", this, e.getDetail()));
+                log.warn(String.format("Failure resolving bookmark for %s. %s", this, e));
             }
         }
         return bookmark;
@@ -160,7 +152,8 @@ public class FinderLocal extends Local {
 
     @Override
     public void setBookmark(final String data) {
-        this.bookmark = data;
+        final String path = this.getAbbreviatedPath();
+        PreferencesFactory.get().setProperty(String.format("local.bookmark.%s", path), data);
     }
 
     @Override
@@ -175,8 +168,8 @@ public class FinderLocal extends Local {
             this.release(resolved);
             return list;
         }
-        catch(AccessDeniedException e) {
-            log.warn(String.format("Failure obtaining lock for %s. %s", this, e.getMessage()));
+        catch(LocalAccessDeniedException e) {
+            log.warn(String.format("Failure obtaining lock for %s. %s", this, e));
             return super.list(filter);
         }
     }
@@ -191,25 +184,10 @@ public class FinderLocal extends Local {
             }
         }
         catch(LocalAccessDeniedException e) {
-            log.warn(String.format("Failure obtaining lock for %s. %s", this, e.getMessage()));
+            log.warn(String.format("Failure obtaining lock for %s. %s", this, e));
             return super.getOutputStream(append);
         }
-        try {
-            return new ProxyOutputStream(new FileOutputStream(new File(resolved.path()), append)) {
-                @Override
-                public void close() throws IOException {
-                    try {
-                        super.close();
-                    }
-                    finally {
-                        release(resolved);
-                    }
-                }
-            };
-        }
-        catch(FileNotFoundException e) {
-            throw new LocalAccessDeniedException(e.getMessage(), e);
-        }
+        return new LockReleaseProxyOutputStream(super.getOutputStream(resolved.path(), append), resolved, append);
     }
 
     /**
@@ -250,12 +228,11 @@ public class FinderLocal extends Local {
                 return super.getInputStream();
             }
         }
-        catch(AccessDeniedException e) {
-            log.warn(String.format("Failure obtaining lock for %s. %s", this, e.getMessage()));
+        catch(LocalAccessDeniedException e) {
+            log.warn(String.format("Failure obtaining lock for %s. %s", this, e));
             return super.getInputStream();
         }
-        final InputStream proxy = super.getInputStream(resolved.path());
-        return new LockReleaseProxyInputStream(proxy, resolved);
+        return new LockReleaseProxyInputStream(super.getInputStream(resolved.path()), resolved);
     }
 
     private static String resolveAlias(final String absolute) {
@@ -280,6 +257,25 @@ public class FinderLocal extends Local {
         private final NSURL resolved;
 
         public LockReleaseProxyInputStream(final InputStream proxy, final NSURL resolved) {
+            super(proxy);
+            this.resolved = resolved;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            }
+            finally {
+                release(resolved);
+            }
+        }
+    }
+
+    private final class LockReleaseProxyOutputStream extends ProxyOutputStream {
+        private final NSURL resolved;
+
+        public LockReleaseProxyOutputStream(final OutputStream proxy, final NSURL resolved, final boolean append) {
             super(proxy);
             this.resolved = resolved;
         }

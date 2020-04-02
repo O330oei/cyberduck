@@ -18,9 +18,9 @@ package ch.cyberduck.core.s3;
  * feedback@cyberduck.io
  */
 
-import ch.cyberduck.core.AbstractPath;
 import ch.cyberduck.core.AttributedList;
 import ch.cyberduck.core.Cache;
+import ch.cyberduck.core.DefaultIOExceptionMappingService;
 import ch.cyberduck.core.ListProgressListener;
 import ch.cyberduck.core.ListService;
 import ch.cyberduck.core.Path;
@@ -29,24 +29,30 @@ import ch.cyberduck.core.PathContainerService;
 import ch.cyberduck.core.PathNormalizer;
 import ch.cyberduck.core.URIEncoder;
 import ch.cyberduck.core.exception.BackgroundException;
+import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.jets3t.service.ServiceException;
 import org.jets3t.service.StorageObjectsChunk;
 import org.jets3t.service.model.StorageObject;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.EnumSet;
 
 public class S3ObjectListService extends S3AbstractListService implements ListService {
     private static final Logger log = Logger.getLogger(S3ObjectListService.class);
 
     private final Preferences preferences
-            = PreferencesFactory.get();
+        = PreferencesFactory.get();
 
     private final PathContainerService containerService
-            = new S3PathContainerService();
+        = new S3PathContainerService();
 
     private final S3Session session;
     private final S3AttributesFinderFeature attributes;
@@ -79,25 +85,28 @@ public class S3ObjectListService extends S3AbstractListService implements ListSe
             final AttributedList<Path> children = new AttributedList<Path>();
             // Null if listing is complete
             String priorLastKey = null;
+            boolean hasDirectoryPlaceholder = containerService.isContainer(directory);
             do {
                 // Read directory listing in chunks. List results are always returned
                 // in lexicographic (alphabetical) order.
                 final StorageObjectsChunk chunk = session.getClient().listObjectsChunked(
-                        PathNormalizer.name(URIEncoder.encode(bucket.getName())), prefix, delimiter,
-                        chunksize, priorLastKey);
+                    bucket.isRoot() ? StringUtils.EMPTY : PathNormalizer.name(URIEncoder.encode(bucket.getName())), prefix, delimiter,
+                    chunksize, priorLastKey, false);
 
                 final StorageObject[] objects = chunk.getObjects();
                 for(StorageObject object : objects) {
-                    final String key = PathNormalizer.normalize(object.getKey());
+                    final String key = PathNormalizer.normalize(URLDecoder.decode(object.getKey(), StandardCharsets.UTF_8.name()));
                     if(String.valueOf(Path.DELIMITER).equals(key)) {
                         log.warn(String.format("Skipping prefix %s", key));
                         continue;
                     }
                     if(new Path(bucket, key, EnumSet.of(Path.Type.directory)).equals(directory)) {
+                        // Placeholder object, skip
+                        hasDirectoryPlaceholder = true;
                         continue;
                     }
-                    final EnumSet<AbstractPath.Type> types = object.getKey().endsWith(String.valueOf(Path.DELIMITER))
-                            ? EnumSet.of(Path.Type.directory) : EnumSet.of(Path.Type.file);
+                    final EnumSet<Path.Type> types = object.getKey().endsWith(String.valueOf(Path.DELIMITER))
+                        ? EnumSet.of(Path.Type.directory) : EnumSet.of(Path.Type.file);
                     final Path file;
                     final PathAttributes attr = attributes.toAttributes(object);
                     // Copy bucket location
@@ -106,7 +115,7 @@ public class S3ObjectListService extends S3AbstractListService implements ListSe
                         file = new Path(String.format("%s%s", bucket.getAbsolute(), key), types, attr);
                     }
                     else {
-                        file = new Path(directory, PathNormalizer.name(key), types, attr);
+                        file = new Path(directory.isDirectory() ? directory : directory.getParent(), PathNormalizer.name(key), types, attr);
                     }
                     children.add(file);
                 }
@@ -116,7 +125,7 @@ public class S3ObjectListService extends S3AbstractListService implements ListSe
                         log.warn(String.format("Skipping prefix %s", common));
                         continue;
                     }
-                    final String key = PathNormalizer.normalize(common);
+                    final String key = PathNormalizer.normalize(URLDecoder.decode(common, StandardCharsets.UTF_8.name()));
                     if(new Path(bucket, key, EnumSet.of(Path.Type.directory)).equals(directory)) {
                         continue;
                     }
@@ -126,16 +135,30 @@ public class S3ObjectListService extends S3AbstractListService implements ListSe
                         file = new Path(String.format("%s%s", bucket.getAbsolute(), key), EnumSet.of(Path.Type.directory, Path.Type.placeholder), attributes);
                     }
                     else {
-                        file = new Path(directory, PathNormalizer.name(key), EnumSet.of(Path.Type.directory, Path.Type.placeholder), attributes);
+                        file = new Path(directory.isDirectory() ? directory : directory.getParent(), PathNormalizer.name(key), EnumSet.of(Path.Type.directory, Path.Type.placeholder), attributes);
                     }
                     attributes.setRegion(bucket.attributes().getRegion());
                     children.add(file);
                 }
-                priorLastKey = chunk.getPriorLastKey();
+                priorLastKey = null != chunk.getPriorLastKey() ? URLDecoder.decode(chunk.getPriorLastKey(), StandardCharsets.UTF_8.name()) : null;
                 listener.chunk(directory, children);
             }
             while(priorLastKey != null);
+            if(!hasDirectoryPlaceholder && children.isEmpty()) {
+                // Only for AWS
+                if(S3Session.isAwsHostname(session.getHost().getHostname())) {
+                    throw new NotfoundException(directory.getAbsolute());
+                }
+                final StorageObjectsChunk chunk = session.getClient().listObjectsChunked(
+                    PathNormalizer.name(URIEncoder.encode(bucket.getName())), String.format("%s%s", this.createPrefix(directory.getParent()), directory.getName()), delimiter, 1, null);
+                if(!Arrays.asList(chunk.getCommonPrefixes()).contains(this.createPrefix(directory))) {
+                    throw new NotfoundException(directory.getAbsolute());
+                }
+            }
             return children;
+        }
+        catch(UnsupportedEncodingException e) {
+            throw new DefaultIOExceptionMappingService().map("Listing directory {0} failed", e, directory);
         }
         catch(ServiceException e) {
             throw new S3ExceptionMappingService().map("Listing directory {0} failed", e, directory);

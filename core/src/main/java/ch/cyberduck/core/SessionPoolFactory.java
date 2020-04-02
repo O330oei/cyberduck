@@ -54,19 +54,25 @@ public class SessionPoolFactory {
     }
 
     public static SessionPool create(final Controller controller, final Cache<Path> cache, final Host bookmark,
+                                     final ProgressListener listener, final TranscriptListener transcript, final Usage... usage) {
+        return create(controller, cache, bookmark, PasswordStoreFactory.get(), LoginCallbackFactory.get(controller), HostKeyCallbackFactory.get(controller,
+            bookmark.getProtocol()), listener, transcript, usage);
+    }
+
+    public static SessionPool create(final Controller controller, final Cache<Path> cache, final Host bookmark,
                                      final ProgressListener listener, final Usage... usage) {
-        return create(cache, bookmark, PasswordStoreFactory.get(), LoginCallbackFactory.get(controller), HostKeyCallbackFactory.get(controller,
+        return create(controller, cache, bookmark, PasswordStoreFactory.get(), LoginCallbackFactory.get(controller), HostKeyCallbackFactory.get(controller,
             bookmark.getProtocol()), listener, controller, usage);
     }
 
-    public static SessionPool create(final Cache<Path> cache, final Host bookmark,
+    public static SessionPool create(final Controller controller, final Cache<Path> cache, final Host bookmark,
                                      final HostPasswordStore keychain, final LoginCallback login, final HostKeyCallback key,
                                      final ProgressListener listener, final TranscriptListener transcript,
                                      final Usage... usage) {
         final LoginConnectionService connect = new LoginConnectionService(login, key, keychain, listener);
         return create(connect, transcript, cache, bookmark,
-            new KeychainX509TrustManager(new DefaultTrustManagerHostnameCallback(bookmark)),
-            new KeychainX509KeyManager(bookmark),
+            new KeychainX509TrustManager(CertificateTrustCallbackFactory.get(controller), new DefaultTrustManagerHostnameCallback(bookmark), CertificateStoreFactory.get()),
+            new KeychainX509KeyManager(CertificateIdentityCallbackFactory.get(controller), bookmark, CertificateStoreFactory.get()),
             VaultRegistryFactory.create(keychain, login), usage);
     }
 
@@ -75,22 +81,23 @@ public class SessionPoolFactory {
                                      final X509TrustManager x509TrustManager, final X509KeyManager x509KeyManager,
                                      final VaultRegistry registry,
                                      final Usage... usage) {
-        if(bookmark.getProtocol().isStateful()) {
-            // Stateful
-            if(Arrays.asList(usage).contains(Usage.browser)) {
-                return stateful(connect, transcript, cache, bookmark, x509TrustManager, x509KeyManager, registry);
-            }
-            // Break through to default pool
-            if(log.isInfoEnabled()) {
-                log.info(String.format("Create new pooled connection pool for %s", bookmark));
-            }
-            return new DefaultSessionPool(connect, x509TrustManager, x509KeyManager, registry, cache, transcript, bookmark)
-                .withMinIdle(PreferencesFactory.get().getInteger("connection.pool.minidle"))
-                .withMaxIdle(PreferencesFactory.get().getInteger("connection.pool.maxidle"))
-                .withMaxTotal(PreferencesFactory.get().getInteger("connection.pool.maxtotal"));
+        switch(bookmark.getProtocol().getStatefulness()) {
+            case stateful:
+                if(Arrays.asList(usage).contains(Usage.browser)) {
+                    return stateful(connect, transcript, cache, bookmark, x509TrustManager, x509KeyManager, registry);
+                }
+                // Break through to default pool
+                if(log.isInfoEnabled()) {
+                    log.info(String.format("Create new pooled connection pool for %s", bookmark));
+                }
+                return new DefaultSessionPool(connect, x509TrustManager, x509KeyManager, registry, cache, transcript, bookmark)
+                    .withMinIdle(PreferencesFactory.get().getInteger("connection.pool.minidle"))
+                    .withMaxIdle(PreferencesFactory.get().getInteger("connection.pool.maxidle"))
+                    .withMaxTotal(PreferencesFactory.get().getInteger("connection.pool.maxtotal"));
+            default:
+                // Stateless protocol
+                return stateless(connect, transcript, cache, bookmark, x509TrustManager, x509KeyManager, registry);
         }
-        // Stateless protocol
-        return stateless(connect, transcript, cache, bookmark, x509TrustManager, x509KeyManager, registry);
     }
 
     /**

@@ -17,24 +17,12 @@ package ch.cyberduck.core.transfer.upload;
  * Bug fixes, suggestions and comments should be sent to feedback@cyberduck.ch
  */
 
-import ch.cyberduck.core.Acl;
-import ch.cyberduck.core.AlphanumericRandomStringService;
-import ch.cyberduck.core.Cache;
-import ch.cyberduck.core.DisabledConnectionCallback;
-import ch.cyberduck.core.Local;
-import ch.cyberduck.core.LocaleFactory;
-import ch.cyberduck.core.MappingMimeTypeService;
-import ch.cyberduck.core.Path;
-import ch.cyberduck.core.PathAttributes;
-import ch.cyberduck.core.PathCache;
-import ch.cyberduck.core.Permission;
-import ch.cyberduck.core.ProgressListener;
-import ch.cyberduck.core.Session;
-import ch.cyberduck.core.UserDateFormatterFactory;
+import ch.cyberduck.core.*;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.InteroperabilityException;
 import ch.cyberduck.core.exception.LocalAccessDeniedException;
+import ch.cyberduck.core.exception.LocalNotfoundException;
 import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.features.AclPermission;
 import ch.cyberduck.core.features.AttributesFinder;
@@ -56,6 +44,7 @@ import ch.cyberduck.core.transfer.TransferOptions;
 import ch.cyberduck.core.transfer.TransferPathFilter;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.core.transfer.symlink.SymlinkResolver;
+import ch.cyberduck.ui.browser.RegexFilter;
 
 import org.apache.log4j.Logger;
 
@@ -70,6 +59,7 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
 
     private final Session<?> session;
     private final SymlinkResolver<Local> symlinkResolver;
+    private final Filter<Path> hidden = new RegexFilter();
 
     protected Find find;
     protected AttributesFinder attribute;
@@ -110,14 +100,16 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
     public boolean accept(final Path file, final Local local, final TransferStatus parent) throws BackgroundException {
         if(!local.exists()) {
             // Local file is no more here
-            throw new NotfoundException(local.getAbsolute());
+            throw new LocalNotfoundException(local.getAbsolute());
         }
         return true;
     }
 
     @Override
     public TransferStatus prepare(final Path file, final Local local, final TransferStatus parent, final ProgressListener progress) throws BackgroundException {
-        final TransferStatus status = new TransferStatus();
+        final TransferStatus status = new TransferStatus()
+            .hidden(!hidden.accept(file))
+            .withLockId(parent.getLockId());
         // Read remote attributes first
         if(parent.isExists()) {
             if(find.withCache(cache).find(file)) {
@@ -140,7 +132,7 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
                 }
             }
         }
-        if(local.isFile()) {
+        if(file.isFile()) {
             // Set content length from local file
             if(local.isSymbolicLink()) {
                 if(!symlinkResolver.resolve(local)) {
@@ -169,7 +161,7 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
             }
             status.withMime(new MappingMimeTypeService().getMime(file.getName()));
         }
-        if(local.isDirectory()) {
+        if(file.isDirectory()) {
             status.setLength(0L);
         }
         if(options.permissions) {
@@ -254,7 +246,7 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
             }
         }
         if(options.redundancy) {
-            if(local.isFile()) {
+            if(file.isFile()) {
                 final Redundancy feature = session.getFeature(Redundancy.class);
                 if(feature != null) {
                     if(status.isExists()) {
@@ -274,8 +266,8 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
             }
         }
         if(options.checksum) {
-            if(local.isFile()) {
-                final ChecksumCompute feature = session.getFeature(Write.class).checksum(file);
+            if(file.isFile()) {
+                final ChecksumCompute feature = session.getFeature(Write.class).checksum(file, status);
                 if(feature != null) {
                     progress.message(MessageFormat.format(LocaleFactory.localizedString("Calculate checksum for {0}", "Status"),
                         file.getName()));
@@ -341,7 +333,7 @@ public abstract class AbstractUploadFilter implements TransferPathFilter {
                     try {
                         listener.message(MessageFormat.format(LocaleFactory.localizedString("Changing timestamp of {0} to {1}", "Status"),
                             file.getName(), UserDateFormatterFactory.get().getShortFormat(status.getTimestamp())));
-                        feature.setTimestamp(file, status.getTimestamp());
+                        feature.setTimestamp(file, status);
                     }
                     catch(BackgroundException e) {
                         // Ignore

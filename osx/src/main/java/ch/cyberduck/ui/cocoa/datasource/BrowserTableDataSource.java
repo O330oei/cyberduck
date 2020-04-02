@@ -38,9 +38,11 @@ import ch.cyberduck.core.Local;
 import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.LocaleFactory;
 import ch.cyberduck.core.Path;
+import ch.cyberduck.core.PathAttributes;
 import ch.cyberduck.core.Permission;
 import ch.cyberduck.core.Scheme;
 import ch.cyberduck.core.UserDateFormatterFactory;
+import ch.cyberduck.core.cache.LRUCache;
 import ch.cyberduck.core.date.AbstractUserDateFormatter;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.HostParserException;
@@ -71,7 +73,6 @@ import ch.cyberduck.ui.cocoa.controller.CopyController;
 import ch.cyberduck.ui.cocoa.controller.DeleteController;
 import ch.cyberduck.ui.cocoa.controller.MoveController;
 
-import org.apache.commons.collections4.map.LRUMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.rococoa.Rococoa;
@@ -104,11 +105,11 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
 
     private final Preferences preferences = PreferencesFactory.get();
 
-    private final Map<Item, NSAttributedString> attributed = new LRUMap<Item, NSAttributedString>(
+    private final LRUCache<Item, NSAttributedString> attributed = LRUCache.build(
         preferences.getInteger("browser.model.cache.size")
     );
 
-    private final Map<Path, AttributedList<Path>> filtered = new LRUMap<Path, AttributedList<Path>>(
+    private final LRUCache<Path, AttributedList<Path>> filtered = LRUCache.build(
         preferences.getInteger("browser.model.cache.size")
     );
 
@@ -165,6 +166,13 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
         this.cache = cache;
     }
 
+    @Override
+    public void invalidate() {
+        attributed.clear();
+        filtered.clear();
+        super.invalidate();
+    }
+
     /**
      * Tell the browser view to reload the data
      *
@@ -178,7 +186,7 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
     }
 
     public AttributedList<Path> get(final Path directory) {
-        if(!filtered.containsKey(directory)) {
+        if(!filtered.contains(directory)) {
             filtered.put(directory, cache.get(directory).filter(controller.getComparator(), controller.getFilter()));
         }
         return filtered.get(directory);
@@ -360,7 +368,7 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
                                 controller.mount(HostParser.parse(elements.objectAtIndex(new NSUInteger(i)).toString()));
                             }
                             catch(HostParserException e) {
-                                log.warn(e.getDetail());
+                                log.warn(e);
                                 continue;
                             }
                             return true;
@@ -396,7 +404,7 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
                 }
                 final Map<Path, Path> files = new HashMap<Path, Path>();
                 for(Path next : pasteboard) {
-                    final Path renamed = new Path(destination, next.getName(), next.getType(), next.attributes().withVersionId(null));
+                    final Path renamed = new Path(destination, next.getName(), next.getType(), new PathAttributes(next.attributes()).withVersionId(null));
                     files.put(next, renamed);
                 }
                 if(pasteboard.getBookmark().compareTo(controller.getSession().getHost()) != 0) {
@@ -461,7 +469,7 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
                 return NSDraggingInfo.NSDragOperationNone;
             }
             final Touch feature = controller.getSession().getFeature(Touch.class);
-            if(!feature.isSupported(destination)) {
+            if(!feature.isSupported(destination, StringUtils.EMPTY)) {
                 // Target file system does not support creating files. Creating files is not supported
                 // for example in root of cloud storage accounts.
                 return NSDraggingInfo.NSDragOperationNone;
@@ -571,8 +579,10 @@ public abstract class BrowserTableDataSource extends ProxyController implements 
                 if(event != null) {
                     NSPoint dragPosition = view.convertPoint_fromView(event.locationInWindow(), null);
                     NSRect imageRect = new NSRect(new NSPoint(dragPosition.x.doubleValue() - 16, dragPosition.y.doubleValue() - 16), new NSSize(32, 32));
-                    view.dragPromisedFilesOfTypes(NSMutableArray.arrayWithObject(fileTypes.iterator().next()), imageRect, this.id(), true, event);
-                    // @see http://www.cocoabuilder.com/archive/message/cocoa/2003/5/15/81424
+                    if(!view.dragPromisedFilesOfTypes(NSMutableArray.arrayWithObject(fileTypes.iterator().next()), imageRect, this.id(), true, event)) {
+                        log.warn(String.format("Failure for drag promise operation of %s", event));
+                        return false;
+                    }
                     return true;
                 }
             }

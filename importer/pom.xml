@@ -18,7 +18,7 @@
     <parent>
         <artifactId>parent</artifactId>
         <groupId>ch.cyberduck</groupId>
-        <version>6.9.3-SNAPSHOT</version>
+        <version>7.3.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -55,30 +55,6 @@
             <properties>
                 <maven.test.skip>true</maven.test.skip>
             </properties>
-        </profile>
-        <profile>
-            <id>mac</id>
-            <activation>
-                <os>
-                    <family>Mac</family>
-                </os>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <artifactId>maven-dependency-plugin</artifactId>
-                    </plugin>
-                </plugins>
-            </build>
-            <dependencies>
-                <dependency>
-                    <groupId>ch.cyberduck</groupId>
-                    <artifactId>libcore</artifactId>
-                    <type>dylib</type>
-                    <scope>runtime</scope>
-                    <version>${project.version}</version>
-                </dependency>
-            </dependencies>
         </profile>
     </profiles>
 

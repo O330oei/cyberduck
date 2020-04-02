@@ -26,6 +26,7 @@ import ch.cyberduck.core.exception.ResolveFailedException;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.http.ConnectionClosedException;
 import org.apache.http.NoHttpResponseException;
 import org.apache.log4j.Logger;
 
@@ -109,9 +110,15 @@ public abstract class AbstractExceptionMappingService<T extends Throwable> imple
             if(cause instanceof NoHttpResponseException) {
                 return new ConnectionRefusedException(buffer.toString(), failure);
             }
+            if(cause instanceof ConnectionClosedException) {
+                return new ConnectionRefusedException(buffer.toString(), failure);
+            }
             if(cause instanceof InterruptedException) {
                 return new ConnectionCanceledException(buffer.toString(), failure);
             }
+        }
+        if(failure instanceof RuntimeException) {
+            return new ConnectionCanceledException(title, buffer.toString(), failure);
         }
         return new BackgroundException(title, buffer.toString(), failure);
     }

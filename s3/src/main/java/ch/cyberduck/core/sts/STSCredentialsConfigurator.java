@@ -23,14 +23,13 @@ import ch.cyberduck.core.LocalFactory;
 import ch.cyberduck.core.LocaleFactory;
 import ch.cyberduck.core.LoginOptions;
 import ch.cyberduck.core.PasswordCallback;
-import ch.cyberduck.core.PreferencesUseragentProvider;
-import ch.cyberduck.core.UseragentProvider;
+import ch.cyberduck.core.aws.CustomClientConfiguration;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.LoginCanceledException;
 import ch.cyberduck.core.exception.LoginFailureException;
-import ch.cyberduck.core.preferences.PreferencesFactory;
-import ch.cyberduck.core.proxy.Proxy;
-import ch.cyberduck.core.proxy.ProxyFactory;
+import ch.cyberduck.core.ssl.ThreadLocalHostnameDelegatingTrustManager;
+import ch.cyberduck.core.ssl.X509KeyManager;
+import ch.cyberduck.core.ssl.X509TrustManager;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
@@ -62,9 +61,13 @@ import com.amazonaws.services.securitytoken.model.GetSessionTokenResult;
 public class STSCredentialsConfigurator {
     private static final Logger log = Logger.getLogger(STSCredentialsConfigurator.class);
 
+    private final X509TrustManager trust;
+    private final X509KeyManager key;
     private final PasswordCallback prompt;
 
-    public STSCredentialsConfigurator(final PasswordCallback prompt) {
+    public STSCredentialsConfigurator(final X509TrustManager trust, final X509KeyManager key, final PasswordCallback prompt) {
+        this.trust = trust;
+        this.key = key;
         this.prompt = prompt;
     }
 
@@ -131,7 +134,7 @@ public class STSCredentialsConfigurator {
                 else {
                     final BasicProfile sourceProfile = profiles.get(basicProfile.getRoleSourceProfile());
                     // If a profile defines the role_arn property then the profile is treated as an assume role profile
-                    final AWSSecurityTokenService service = this.getTokenService(ProxyFactory.get().find(host),
+                    final AWSSecurityTokenService service = this.getTokenService(host,
                         host.getRegion(),
                         sourceProfile.getAwsAccessIdKey(), sourceProfile.getAwsSecretAccessKey(), sourceProfile.getAwsSessionToken());
                     final String tokenCode;
@@ -199,7 +202,7 @@ public class STSCredentialsConfigurator {
                         if(log.isDebugEnabled()) {
                             log.debug(String.format("Get session token from credentials in profile %s", basicProfile.getProfileName()));
                         }
-                        final AWSSecurityTokenService service = this.getTokenService(ProxyFactory.get().find(host),
+                        final AWSSecurityTokenService service = this.getTokenService(host,
                             host.getRegion(),
                             basicProfile.getAwsAccessIdKey(), basicProfile.getAwsSecretAccessKey(), basicProfile.getAwsSessionToken());
                         final GetSessionTokenRequest sessionTokenRequest = new GetSessionTokenRequest();
@@ -232,22 +235,9 @@ public class STSCredentialsConfigurator {
         return credentials;
     }
 
-    protected AWSSecurityTokenService getTokenService(final Proxy proxy, final String region, final String accessKey, final String secretKey, final String sessionToken) {
-        final ClientConfiguration configuration = new ClientConfiguration();
-        final int timeout = PreferencesFactory.get().getInteger("connection.timeout.seconds") * 1000;
-        configuration.setConnectionTimeout(timeout);
-        configuration.setSocketTimeout(timeout);
-        final UseragentProvider ua = new PreferencesUseragentProvider();
-        configuration.setUserAgentPrefix(ua.get());
-        configuration.setMaxErrorRetry(0);
-        configuration.setMaxConnections(1);
-        configuration.setUseGzip(PreferencesFactory.get().getBoolean("http.compression.enable"));
-        switch(proxy.getType()) {
-            case HTTP:
-            case HTTPS:
-                configuration.setProxyHost(proxy.getHostname());
-                configuration.setProxyPort(proxy.getPort());
-        }
+    protected AWSSecurityTokenService getTokenService(final Host host, final String region, final String accessKey, final String secretKey, final String sessionToken) {
+        final ClientConfiguration configuration = new CustomClientConfiguration(host,
+            new ThreadLocalHostnameDelegatingTrustManager(trust, host.getHostname()), key);
         return AWSSecurityTokenServiceClientBuilder.standard()
             .withCredentials(new AWSStaticCredentialsProvider(StringUtils.isBlank(sessionToken) ? new AWSCredentials() {
                 @Override
@@ -280,14 +270,13 @@ public class STSCredentialsConfigurator {
     }
 
     /**
-     * Implementation of AbstractProfilesConfigFileScanner that groups profile properties into a map
-     * while scanning through the credentials profile.
+     * Implementation of AbstractProfilesConfigFileScanner that groups profile properties into a map while scanning
+     * through the credentials profile.
      */
     private static final class ProfilesConfigFileLoaderHelper extends AbstractProfilesConfigFileScanner {
 
         /**
-         * Map from the parsed profile name to the map of all the property values included the
-         * specific profile
+         * Map from the parsed profile name to the map of all the property values included the specific profile
          */
         protected final Map<String, Map<String, String>> allProfileProperties = new LinkedHashMap<String, Map<String, String>>();
 
@@ -324,8 +313,7 @@ public class STSCredentialsConfigurator {
             Map<String, String> properties = allProfileProperties.get(profileName);
 
             if(properties.containsKey(propertyKey)) {
-                throw new IllegalArgumentException(
-                    "Duplicate property values for [" + propertyKey + "].");
+                log.warn("Duplicate property values for [" + propertyKey + "].");
             }
 
             properties.put(propertyKey, propertyValue);

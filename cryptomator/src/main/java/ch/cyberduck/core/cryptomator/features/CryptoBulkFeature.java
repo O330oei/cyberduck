@@ -33,7 +33,6 @@ import ch.cyberduck.core.transfer.TransferItem;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.core.transfer.download.PathPriorityComparator;
 
-import org.cryptomator.cryptolib.api.Cryptor;
 import org.cryptomator.cryptolib.api.FileHeader;
 
 import java.util.ArrayList;
@@ -52,7 +51,7 @@ public class CryptoBulkFeature<R> implements Bulk<R> {
 
     public CryptoBulkFeature(final Session<?> session, final Bulk<R> delegate, final Delete delete, final CryptoVault cryptomator) {
         this.session = session;
-        this.delegate = delegate.withDelete(new CryptoDeleteFeature(session, delete, cryptomator));
+        this.delegate = delegate.withDelete(cryptomator.getFeature(session, Delete.class, delete));
         this.cryptomator = cryptomator;
     }
 
@@ -73,9 +72,8 @@ public class CryptoBulkFeature<R> implements Bulk<R> {
             final TransferStatus status = entry.getValue();
             if(null == status.getHeader()) {
                 // Write header to be reused in writer
-                final Cryptor cryptor = cryptomator.getCryptor();
-                final FileHeader header = cryptor.fileHeaderCryptor().create();
-                status.setHeader(cryptor.fileHeaderCryptor().encryptHeader(header));
+                final FileHeader header = cryptomator.getFileHeaderCryptor().create();
+                status.setHeader(cryptomator.getFileHeaderCryptor().encryptHeader(header));
             }
             if(null == status.getNonces()) {
                 status.setNonces(new RandomNonceGenerator());
@@ -106,7 +104,7 @@ public class CryptoBulkFeature<R> implements Bulk<R> {
 
     @Override
     public Bulk<R> withDelete(final Delete delete) {
-        delegate.withDelete(new CryptoDeleteFeature(session, delete, cryptomator));
+        delegate.withDelete(cryptomator.getFeature(session, Delete.class, delete));
         return this;
     }
 

@@ -25,15 +25,15 @@ import ch.cyberduck.core.LoginCallback;
 import ch.cyberduck.core.LoginOptions;
 import ch.cyberduck.core.LoginService;
 import ch.cyberduck.core.PasswordStoreFactory;
-import ch.cyberduck.core.PreferencesUseragentProvider;
-import ch.cyberduck.core.UseragentProvider;
 import ch.cyberduck.core.auth.AWSCredentialsConfigurator;
+import ch.cyberduck.core.aws.CustomClientConfiguration;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.LoginFailureException;
 import ch.cyberduck.core.identity.IdentityConfiguration;
 import ch.cyberduck.core.preferences.PreferencesFactory;
-import ch.cyberduck.core.proxy.Proxy;
-import ch.cyberduck.core.proxy.ProxyFactory;
+import ch.cyberduck.core.ssl.ThreadLocalHostnameDelegatingTrustManager;
+import ch.cyberduck.core.ssl.X509KeyManager;
+import ch.cyberduck.core.ssl.X509TrustManager;
 
 import org.apache.log4j.Logger;
 
@@ -57,27 +57,10 @@ public class AmazonIdentityConfiguration implements IdentityConfiguration {
     private static final String prefix = "iam.";
     public final ClientConfiguration configuration;
 
-    public AmazonIdentityConfiguration(final Host bookmark) {
-        this(bookmark, PreferencesFactory.get().getInteger("connection.timeout.seconds") * 1000);
-    }
-
-    public AmazonIdentityConfiguration(final Host bookmark, final int timeout) {
+    public AmazonIdentityConfiguration(final Host bookmark, final X509TrustManager trust, final X509KeyManager key) {
         this.bookmark = bookmark;
-        this.configuration = new ClientConfiguration();
-        this.configuration.setConnectionTimeout(timeout);
-        this.configuration.setSocketTimeout(timeout);
-        final UseragentProvider ua = new PreferencesUseragentProvider();
-        this.configuration.setUserAgentPrefix(ua.get());
-        this.configuration.setMaxErrorRetry(0);
-        this.configuration.setMaxConnections(1);
-        this.configuration.setUseGzip(PreferencesFactory.get().getBoolean("http.compression.enable"));
-        final Proxy proxy = ProxyFactory.get().find(bookmark);
-        switch(proxy.getType()) {
-            case HTTP:
-            case HTTPS:
-                this.configuration.setProxyHost(proxy.getHostname());
-                this.configuration.setProxyPort(proxy.getPort());
-        }
+        this.configuration = new CustomClientConfiguration(bookmark,
+            new ThreadLocalHostnameDelegatingTrustManager(trust, bookmark.getHostname()), key);
     }
 
     private interface Authenticated<T> extends Callable<T> {

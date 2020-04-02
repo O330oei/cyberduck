@@ -30,6 +30,7 @@ import ch.cyberduck.core.features.Copy;
 import ch.cyberduck.core.features.Delete;
 import ch.cyberduck.core.features.Directory;
 import ch.cyberduck.core.features.Move;
+import ch.cyberduck.core.features.PromptUrlProvider;
 import ch.cyberduck.core.features.Symlink;
 import ch.cyberduck.core.features.Touch;
 import ch.cyberduck.core.features.Versioning;
@@ -37,8 +38,6 @@ import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.vault.VaultRegistry;
 import ch.cyberduck.ui.browser.UploadTargetFinder;
 import ch.cyberduck.ui.cocoa.controller.BrowserController;
-import ch.cyberduck.ui.cocoa.quicklook.QuickLook;
-import ch.cyberduck.ui.cocoa.quicklook.QuickLookFactory;
 
 import org.apache.commons.lang3.StringUtils;
 import org.rococoa.Foundation;
@@ -48,8 +47,6 @@ import org.rococoa.Selector;
 import static ch.cyberduck.ui.cocoa.toolbar.BrowserToolbarFactory.BrowserToolbarItem.*;
 
 public class BrowserToolbarValidator implements ToolbarValidator {
-
-    private final QuickLook quicklook = QuickLookFactory.get();
 
     private final BrowserController controller;
 
@@ -233,13 +230,13 @@ public class BrowserToolbarValidator implements ToolbarValidator {
         }
         else if(action.equals(Foundation.selector("createFileButtonClicked:"))) {
             return this.isBrowser() && controller.isMounted() && controller.getSession().getFeature(Touch.class).isSupported(
-                new UploadTargetFinder(controller.workdir()).find(controller.getSelectedPath())
+                new UploadTargetFinder(controller.workdir()).find(controller.getSelectedPath()), StringUtils.EMPTY
             );
         }
         else if(action.equals(upload.action())) {
             return this.isBrowser() && controller.isMounted() && controller.getSession().getFeature(Touch.class).isSupported(
-                new UploadTargetFinder(controller.workdir()).find(controller.getSelectedPath())
-            );
+                new UploadTargetFinder(controller.workdir()).find(controller.getSelectedPath()),
+                StringUtils.EMPTY);
         }
         else if(action.equals(Foundation.selector("createSymlinkButtonClicked:"))) {
             return this.isBrowser() && controller.isMounted() && controller.getSession().getFeature(Symlink.class) != null
@@ -266,6 +263,17 @@ public class BrowserToolbarValidator implements ToolbarValidator {
                     return false;
                 }
                 return controller.getSession().getFeature(Delete.class).isSupported(selected);
+            }
+            return false;
+        }
+        else if(action.equals(share.action())) {
+            if(this.isBrowser() && controller.isMounted() && controller.getSelectionCount() == 1) {
+                final Path selected = controller.getSelectedPath();
+                if(null == selected) {
+                    return false;
+                }
+                return controller.getSession().getFeature(PromptUrlProvider.class) != null &&
+                    controller.getSession().getFeature(PromptUrlProvider.class).isSupported(selected, PromptUrlProvider.Type.download);
             }
             return false;
         }
@@ -307,7 +315,7 @@ public class BrowserToolbarValidator implements ToolbarValidator {
             return this.isBrowser() && controller.isMounted();
         }
         else if(action.equals(disconnect.action())) {
-            return this.isBrowser() && (!controller.isIdle() || controller.isConnected());
+            return !controller.isIdle() || controller.isConnected();
         }
         else if(action.equals(Foundation.selector("gotofolderButtonClicked:"))) {
             return this.isBrowser() && controller.isMounted();

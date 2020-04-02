@@ -19,6 +19,7 @@ package ch.cyberduck.core.transfer.download;
 
 import ch.cyberduck.core.Cache;
 import ch.cyberduck.core.DescriptiveUrl;
+import ch.cyberduck.core.DescriptiveUrlBag;
 import ch.cyberduck.core.HostUrlProvider;
 import ch.cyberduck.core.Local;
 import ch.cyberduck.core.LocalFactory;
@@ -47,7 +48,6 @@ import ch.cyberduck.core.local.QuarantineService;
 import ch.cyberduck.core.local.QuarantineServiceFactory;
 import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
-import ch.cyberduck.core.shared.DefaultAttributesFinderFeature;
 import ch.cyberduck.core.transfer.TransferOptions;
 import ch.cyberduck.core.transfer.TransferPathFilter;
 import ch.cyberduck.core.transfer.TransferStatus;
@@ -57,6 +57,11 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -65,32 +70,21 @@ import java.util.List;
 public abstract class AbstractDownloadFilter implements TransferPathFilter {
     private static final Logger log = Logger.getLogger(AbstractDownloadFilter.class);
 
-    private final SymlinkResolver<Path> symlinkResolver;
-
-    private final QuarantineService quarantine
-        = QuarantineServiceFactory.get();
-
-    private final ApplicationLauncher launcher
-        = ApplicationLauncherFactory.get();
-
-    private final Preferences preferences
-        = PreferencesFactory.get();
-
-    private final IconService icon
-        = IconServiceFactory.get();
-
     private final Session<?> session;
+    private final SymlinkResolver<Path> symlinkResolver;
+    private final QuarantineService quarantine = QuarantineServiceFactory.get();
+    private final ApplicationLauncher launcher = ApplicationLauncherFactory.get();
+    private final Preferences preferences = PreferencesFactory.get();
+    private final IconService icon = IconServiceFactory.get();
 
     protected AttributesFinder attribute;
-
     private DownloadFilterOptions options;
 
-    protected AbstractDownloadFilter(final SymlinkResolver<Path> symlinkResolver, final Session<?> session,
-                                     final DownloadFilterOptions options) {
+    protected AbstractDownloadFilter(final SymlinkResolver<Path> symlinkResolver, final Session<?> session, final DownloadFilterOptions options) {
         this.symlinkResolver = symlinkResolver;
         this.session = session;
         this.options = options;
-        this.attribute = session.getFeature(AttributesFinder.class, new DefaultAttributesFinderFeature(session));
+        this.attribute = session.getFeature(AttributesFinder.class);
     }
 
     @Override
@@ -196,43 +190,67 @@ public abstract class AbstractDownloadFilter implements TransferPathFilter {
         status.setAcl(attributes.getAcl());
         if(options.segments) {
             if(file.isFile()) {
-                // Make segments
-                if(status.getLength() >= preferences.getLong("queue.download.segments.threshold")
-                    && status.getLength() > preferences.getLong("queue.download.segments.size")) {
-                    final Download read = session.getFeature(Download.class);
-                    if(read.offset(file)) {
-                        if(log.isInfoEnabled()) {
-                            log.info(String.format("Split download %s into segments", local));
-                        }
-                        long remaining = status.getLength();
-                        long offset = 0;
-                        // Part size from default setting of size divided by maximum number of connections
-                        long partsize = Math.max(
-                            preferences.getLong("queue.download.segments.size"),
-                            status.getLength() / preferences.getInteger("queue.connections.limit"));
-                        // Sorted list
-                        final List<TransferStatus> segments = new ArrayList<TransferStatus>();
-                        final Local segmentsFolder = LocalFactory.get(local.getParent(), String.format("%s.cyberducksegment", local.getName()));
-                        for(int segmentNumber = 1; remaining > 0; segmentNumber++) {
-                            final Local segmentFile = LocalFactory.get(
-                                segmentsFolder, String.format("%s-%d.cyberducksegment", local.getName(), segmentNumber));
-                            boolean skip = false;
-                            // Last part can be less than 5 MB. Adjust part size.
-                            Long length = Math.min(partsize, remaining);
-                            final TransferStatus segmentStatus = new TransferStatus()
-                                .segment(true)
-                                .append(true)
-                                .skip(offset)
-                                .length(length)
-                                .rename(segmentFile);
-                            if(log.isDebugEnabled()) {
-                                log.debug(String.format("Adding status %s for segment %s", segmentStatus, segmentFile));
+                // Free space on disk
+                long space = 0L;
+                try {
+                    space = Files.getFileStore(Paths.get(local.getParent().getAbsolute())).getUsableSpace();
+                }
+                catch(IOException e) {
+                    log.warn(String.format("Failure to determine disk space for %s", file.getParent()));
+                }
+                if(status.getLength() * 2 > space) {
+                    log.warn(String.format("Insufficient free disk space %d for segmented download of %s", space, file));
+                }
+                else {
+                    // Make segments
+                    if(status.getLength() >= preferences.getLong("queue.download.segments.threshold")
+                        && status.getLength() > preferences.getLong("queue.download.segments.size")) {
+                        final Download read = session.getFeature(Download.class);
+                        if(read.offset(file)) {
+                            if(log.isInfoEnabled()) {
+                                log.info(String.format("Split download %s into segments", local));
                             }
-                            segments.add(segmentStatus);
-                            remaining -= length;
-                            offset += length;
+                            long remaining = status.getLength();
+                            long offset = 0;
+                            // Part size from default setting of size divided by maximum number of connections
+                            long partsize = Math.max(
+                                preferences.getLong("queue.download.segments.size"),
+                                status.getLength() / preferences.getInteger("queue.connections.limit"));
+                            // Sorted list
+                            final List<TransferStatus> segments = new ArrayList<TransferStatus>();
+                            final Local segmentsFolder = LocalFactory.get(local.getParent(), String.format("%s.cyberducksegment", local.getName()));
+                            for(int segmentNumber = 1; remaining > 0; segmentNumber++) {
+                                final Local segmentFile = LocalFactory.get(
+                                    segmentsFolder, String.format("%s-%d.cyberducksegment", local.getName(), segmentNumber));
+                                try {
+                                    // Test path length
+                                    Paths.get(segmentFile.getAbsolute()).toRealPath();
+                                }
+                                catch(NoSuchFileException e) {
+                                    // Continue
+                                }
+                                catch(InvalidPathException | IOException e) {
+                                    log.error(String.format("Failure to create path for segment %s. %s", segmentFile, e.getMessage()));
+                                    segments.clear();
+                                    break;
+                                }
+                                // Last part can be less than 5 MB. Adjust part size.
+                                long length = Math.min(partsize, remaining);
+                                final TransferStatus segmentStatus = new TransferStatus()
+                                    .segment(true) // Skip completion filter for single segment
+                                    .append(true) // Read with offset
+                                    .skip(offset)
+                                    .length(length)
+                                    .rename(segmentFile);
+                                if(log.isDebugEnabled()) {
+                                    log.debug(String.format("Adding status %s for segment %s", segmentStatus, segmentFile));
+                                }
+                                segments.add(segmentStatus);
+                                remaining -= length;
+                                offset += length;
+                            }
+                            status.withSegments(segments);
                         }
-                        status.withSegments(segments);
                     }
                 }
             }
@@ -307,22 +325,22 @@ public abstract class AbstractDownloadFilter implements TransferPathFilter {
                     icon.set(local, status);
                     icon.remove(local);
                 }
-                final DescriptiveUrl provider = session.getFeature(UrlProvider.class).toUrl(file).find(DescriptiveUrl.Type.provider);
-                if(!DescriptiveUrl.EMPTY.equals(provider)) {
+                final DescriptiveUrlBag provider = session.getFeature(UrlProvider.class).toUrl(file).filter(DescriptiveUrl.Type.provider, DescriptiveUrl.Type.http);
+                for(DescriptiveUrl url : provider) {
                     try {
                         if(options.quarantine) {
                             // Set quarantine attributes
-                            quarantine.setQuarantine(local, new HostUrlProvider().withUsername(false).get(session.getHost()),
-                                provider.getUrl());
+                            quarantine.setQuarantine(local, new HostUrlProvider().withUsername(false).get(session.getHost()), url.getUrl());
                         }
                         if(this.options.wherefrom) {
                             // Set quarantine attributes
-                            quarantine.setWhereFrom(local, provider.getUrl());
+                            quarantine.setWhereFrom(local, url.getUrl());
                         }
                     }
                     catch(LocalAccessDeniedException e) {
                         log.warn(String.format("Failure to quarantine file %s. %s", file, e.getMessage()));
                     }
+                    break;
                 }
             }
             if(!Permission.EMPTY.equals(status.getPermission())) {

@@ -19,6 +19,7 @@ import ch.cyberduck.core.Controller;
 import ch.cyberduck.core.Session;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.ConnectionCanceledException;
+import ch.cyberduck.core.exception.LoginFailureException;
 import ch.cyberduck.core.pool.SessionPool;
 import ch.cyberduck.core.worker.TransferWorker;
 
@@ -29,11 +30,13 @@ import java.util.Objects;
 public class TransferWorkerBackgroundAction<T> extends RegistryBackgroundAction<T> {
     private static final Logger log = Logger.getLogger(TransferWorkerBackgroundAction.class);
 
+    private final SessionPool pool;
     protected final TransferWorker<T> worker;
     protected T result;
 
-    public TransferWorkerBackgroundAction(final Controller controller, final TransferWorker<T> worker) {
-        super(controller, SessionPool.DISCONNECTED);
+    public TransferWorkerBackgroundAction(final Controller controller, final SessionPool pool, final TransferWorker<T> worker) {
+        super(controller, pool);
+        this.pool = pool;
         this.worker = worker;
     }
 
@@ -44,12 +47,13 @@ public class TransferWorkerBackgroundAction<T> extends RegistryBackgroundAction<
     }
 
     @Override
-    public T run() throws BackgroundException {
+    public T run(final Session<?> session) throws BackgroundException {
         if(log.isDebugEnabled()) {
             log.debug(String.format("Run worker %s", worker));
         }
         try {
-            return worker.run();
+            pool.release(session, null);
+            return worker.run(session);
         }
         catch(ConnectionCanceledException e) {
             worker.cancel();
@@ -58,8 +62,8 @@ public class TransferWorkerBackgroundAction<T> extends RegistryBackgroundAction<
     }
 
     @Override
-    public T run(final Session<?> session) throws BackgroundException {
-        return this.run();
+    protected boolean login(final Session<?> session, final LoginFailureException e) {
+        return false;
     }
 
     @Override

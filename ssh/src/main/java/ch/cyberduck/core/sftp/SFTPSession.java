@@ -18,19 +18,7 @@ package ch.cyberduck.core.sftp;
  *  dkocher@cyberduck.ch
  */
 
-import ch.cyberduck.core.AuthenticationProvider;
-import ch.cyberduck.core.BookmarkNameProvider;
-import ch.cyberduck.core.ConnectionCallback;
-import ch.cyberduck.core.Credentials;
-import ch.cyberduck.core.Host;
-import ch.cyberduck.core.HostKeyCallback;
-import ch.cyberduck.core.HostnameConfiguratorFactory;
-import ch.cyberduck.core.ListService;
-import ch.cyberduck.core.LocaleFactory;
-import ch.cyberduck.core.LoginCallback;
-import ch.cyberduck.core.Path;
-import ch.cyberduck.core.PreferencesUseragentProvider;
-import ch.cyberduck.core.Session;
+import ch.cyberduck.core.*;
 import ch.cyberduck.core.cdn.DistributionConfiguration;
 import ch.cyberduck.core.cloudfront.CustomOriginCloudFrontDistributionConfiguration;
 import ch.cyberduck.core.exception.BackgroundException;
@@ -52,19 +40,20 @@ import ch.cyberduck.core.sftp.auth.SFTPPasswordAuthentication;
 import ch.cyberduck.core.sftp.auth.SFTPPublicKeyAuthentication;
 import ch.cyberduck.core.sftp.openssh.OpenSSHAgentAuthenticator;
 import ch.cyberduck.core.sftp.putty.PageantAuthenticator;
-import ch.cyberduck.core.ssl.DefaultTrustManagerHostnameCallback;
+import ch.cyberduck.core.ssl.X509KeyManager;
+import ch.cyberduck.core.ssl.X509TrustManager;
 import ch.cyberduck.core.threading.CancelCallback;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
-import javax.net.SocketFactory;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.security.PublicKey;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -96,20 +85,16 @@ public class SFTPSession extends Session<SSHClient> {
         = PreferencesFactory.get();
 
     private SFTPEngine sftp;
-
     private StateDisconnectListener disconnectListener;
-
     private NegotiatedAlgorithms algorithms;
 
-    private final SocketFactory socketFactory;
+    private final X509TrustManager trust;
+    private final X509KeyManager key;
 
-    public SFTPSession(final Host h) {
-        this(h, new ProxySocketFactory(h.getProtocol(), new DefaultTrustManagerHostnameCallback(h)));
-    }
-
-    public SFTPSession(final Host h, final SocketFactory socketFactory) {
+    public SFTPSession(final Host h, final X509TrustManager trust, final X509KeyManager key) {
         super(h);
-        this.socketFactory = socketFactory;
+        this.trust = trust;
+        this.key = key;
     }
 
     @Override
@@ -153,12 +138,12 @@ public class SFTPSession extends Session<SSHClient> {
         final SSHClient connection = new SSHClient(configuration);
         final int timeout = preferences.getInteger("connection.timeout.seconds") * 1000;
         connection.setTimeout(timeout);
-        connection.setSocketFactory(socketFactory);
+        connection.setSocketFactory(new ProxySocketFactory(host));
         connection.addHostKeyVerifier(new HostKeyVerifier() {
             @Override
             public boolean verify(String hostname, int port, PublicKey publicKey) {
                 try {
-                    return key.verify(hostname, port, publicKey);
+                    return key.verify(host, publicKey);
                 }
                 catch(ConnectionCanceledException | ChecksumException e) {
                     return false;
@@ -214,8 +199,9 @@ public class SFTPSession extends Session<SSHClient> {
     private void alert(final ConnectionCallback prompt, final String algorithm) throws ConnectionCanceledException {
         prompt.warn(host, MessageFormat.format(LocaleFactory.localizedString("Insecure algorithm {0} negotiated with server", "Credentials"),
             algorithm),
-            MessageFormat.format("{0}. {1}.", LocaleFactory.localizedString("The algorithm is possibly too weak to meet current cryptography standards", "Credentials"),
-                LocaleFactory.localizedString("Please contact your web hosting service provider for assistance", "Support")),
+            new StringAppender()
+                .append(LocaleFactory.localizedString("The algorithm is possibly too weak to meet current cryptography standards", "Credentials"))
+                .append(LocaleFactory.localizedString("Please contact your web hosting service provider for assistance", "Support")).toString(),
             LocaleFactory.localizedString("Continue", "Credentials"),
             LocaleFactory.localizedString("Disconnect", "Credentials"),
             String.format("ssh.algorithm.whitelist.%s", host.getHostname()));
@@ -223,42 +209,76 @@ public class SFTPSession extends Session<SSHClient> {
 
     @Override
     public void login(final Proxy proxy, final LoginCallback prompt, final CancelCallback cancel) throws BackgroundException {
-        final List<AuthenticationProvider<Boolean>> methods = new ArrayList<AuthenticationProvider<Boolean>>();
         final Credentials credentials = host.getCredentials();
-        if(credentials.isAnonymousLogin()) {
-            methods.add(new SFTPNoneAuthentication(this));
-        }
-        else {
-            if(preferences.getBoolean("ssh.authentication.agent.enable")) {
-                methods.add(new SFTPAgentAuthentication(this, new OpenSSHAgentAuthenticator()));
-                methods.add(new SFTPAgentAuthentication(this, new PageantAuthenticator()));
+        try {
+            if(new SFTPNoneAuthentication(this).authenticate(host, prompt, cancel)) {
+                return;
             }
-            methods.add(new SFTPPublicKeyAuthentication(this));
-            methods.add(new SFTPChallengeResponseAuthentication(this));
-            methods.add(new SFTPPasswordAuthentication(this));
         }
+        catch(LoginFailureException e) {
+            // Expected. The main purpose of sending this request is to get the list of supported methods from the server
+        }
+        // Ordered list of preferred authentication methods
+        final List<AuthenticationProvider<Boolean>> methods = new ArrayList<AuthenticationProvider<Boolean>>();
+        if(preferences.getBoolean("ssh.authentication.agent.enable")) {
+            switch(Factory.Platform.getDefault()) {
+                case windows:
+                    methods.add(new SFTPAgentAuthentication(this, new PageantAuthenticator()));
+                    break;
+                default:
+                    methods.add(new SFTPAgentAuthentication(this, new OpenSSHAgentAuthenticator()));
+                    break;
+            }
+        }
+        methods.add(new SFTPPublicKeyAuthentication(this));
+        methods.add(new SFTPChallengeResponseAuthentication(this));
+        methods.add(new SFTPPasswordAuthentication(this));
         if(log.isDebugEnabled()) {
-            log.debug(String.format("Attempt login with %d authentication methods", methods.size()));
+            log.debug(String.format("Attempt login with %d authentication methods %s", methods.size(), Arrays.toString(methods.toArray())));
         }
         BackgroundException lastFailure = null;
         for(AuthenticationProvider<Boolean> auth : methods) {
-            if(log.isDebugEnabled()) {
-                log.debug(String.format("Attempt authentication with credentials %s and authentication method %s", credentials, auth));
-            }
             cancel.verify();
             try {
-                if(!auth.authenticate(host, prompt, cancel)) {
-                    if(client.getUserAuth().hadPartialSuccess()) {
-                        if(log.isDebugEnabled()) {
-                            log.debug(String.format("Partial login success with credentials %s and authentication method %s", credentials, auth));
+                // Obtain latest list of allowed methods
+                final Collection allowed = (Collection) client.getUserAuth().getAllowedMethods();
+                if(log.isDebugEnabled()) {
+                    log.debug(String.format("Remaining authentication methods %s", Arrays.toString(allowed.toArray())));
+                }
+                if(!allowed.contains(auth.getMethod())) {
+                    log.warn(String.format("Skip authentication method %s not allowed", auth));
+                    continue;
+                }
+                if(log.isInfoEnabled()) {
+                    log.info(String.format("Attempt authentication with credentials %s and authentication method %s", credentials, auth));
+                }
+                try {
+                    if(auth.authenticate(host, prompt, cancel)) {
+                        if(log.isInfoEnabled()) {
+                            log.info(String.format("Authentication succeeded with credentials %s and authentication method %s", credentials, auth));
                         }
+                        // Success
+                        break;
                     }
                     else {
-                        if(log.isDebugEnabled()) {
-                            log.debug(String.format("Login refused with credentials %s and authentication method %s", credentials, auth));
+                        // Check if authentication is partial
+                        if(client.getUserAuth().hadPartialSuccess()) {
+                            log.info(String.format("Partial login success with credentials %s and authentication method %s", credentials, auth));
                         }
+                        else {
+                            log.warn(String.format("Login refused with credentials %s and authentication method %s", credentials, auth));
+                        }
+                        // Continue trying next authentication method
                     }
-                    continue;
+                }
+                catch(LoginFailureException e) {
+                    log.warn(String.format("Login failed with credentials %s and authentication method %s", credentials, auth));
+                    if(!client.isConnected()) {
+                        log.warn(String.format("Server disconnected after failed authentication attempt with method %s", auth));
+                        // No more connected. When changing the username the connection is closed by the server.
+                        throw e;
+                    }
+                    lastFailure = e;
                 }
             }
             catch(IllegalStateException ignored) {
@@ -278,26 +298,7 @@ public class SFTPSession extends Session<SSHClient> {
             catch(InteroperabilityException e) {
                 throw new LoginFailureException(e.getDetail(false), e);
             }
-            catch(LoginFailureException e) {
-                log.warn(String.format("Login failed with credentials %s and authentication method %s", credentials, auth));
-                if(!client.isConnected()) {
-                    log.warn(String.format("Server disconnected after failed authentication attempt with method %s", auth));
-                    // No more connected. When changing the username the connection is closed by the server.
-                    throw e;
-                }
-                lastFailure = e;
-                continue;
-            }
-            if(log.isInfoEnabled()) {
-                log.info(String.format("Login successful with authentication method %s", auth));
-            }
-            break;
         }
-        final String banner = client.getUserAuth().getBanner();
-        if(StringUtils.isNotBlank(banner)) {
-            this.log(Type.response, banner);
-        }
-        // Check if authentication is partial
         if(!client.isAuthenticated()) {
             if(null == lastFailure) {
                 throw new LoginFailureException(MessageFormat.format(LocaleFactory.localizedString(
@@ -305,16 +306,13 @@ public class SFTPSession extends Session<SSHClient> {
             }
             throw lastFailure;
         }
+        final String banner = client.getUserAuth().getBanner();
+        if(StringUtils.isNotBlank(banner)) {
+            this.log(Type.response, banner);
+        }
         try {
-            sftp = new SFTPEngine(client, String.valueOf(Path.DELIMITER)) {
-                @Override
-                public Promise<Response, SFTPException> request(final Request req) throws IOException {
-                    log(Type.request, String.format("%d %s", req.getRequestID(), req.getType()));
-                    return super.request(req);
-                }
-            }.init();
-            final int timeout = preferences.getInteger("connection.timeout.seconds") * 1000;
-            sftp.setTimeoutMs(timeout);
+            sftp = new LoggingSFTPEngine(client, this).init();
+            sftp.setTimeoutMs(preferences.getInteger("connection.timeout.seconds") * 1000);
         }
         catch(IOException e) {
             throw new SFTPExceptionMappingService().map(e);
@@ -398,7 +396,7 @@ public class SFTPSession extends Session<SSHClient> {
             return (T) new SFTPCompressFeature(this);
         }
         if(type == DistributionConfiguration.class) {
-            return (T) new CustomOriginCloudFrontDistributionConfiguration(host);
+            return (T) new CustomOriginCloudFrontDistributionConfiguration(host, trust, key);
         }
         if(type == Home.class) {
             return (T) new SFTPHomeDirectoryService(this);
@@ -423,6 +421,21 @@ public class SFTPSession extends Session<SSHClient> {
          */
         public SSHException getFailure() {
             return failure;
+        }
+    }
+
+    private static final class LoggingSFTPEngine extends SFTPEngine {
+        private final TranscriptListener transcript;
+
+        public LoggingSFTPEngine(final SSHClient client, final TranscriptListener transcript) throws SSHException {
+            super(client, String.valueOf(Path.DELIMITER));
+            this.transcript = transcript;
+        }
+
+        @Override
+        public Promise<Response, SFTPException> request(final Request req) throws IOException {
+            transcript.log(Type.request, String.format("%d %s", req.getRequestID(), req.getType()));
+            return super.request(req);
         }
     }
 }

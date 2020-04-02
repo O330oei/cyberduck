@@ -163,8 +163,8 @@ public class BookmarkTableDataSource extends ListDataSource {
     }
 
     /**
-     * @return The filtered collection currently to be displayed within the constraints
-     * given by the comparison with the bookmark filter
+     * @return The filtered collection currently to be displayed within the constraints given by the comparison with the
+     * bookmark filter
      * @see HostFilter
      */
     public AbstractHostCollection getSource() {
@@ -172,65 +172,7 @@ public class BookmarkTableDataSource extends ListDataSource {
             return source;
         }
         if(null == filtered) {
-            filtered = new AbstractHostCollection() {
-                private static final long serialVersionUID = -2154002477046004380L;
-
-                @Override
-                public String getName() {
-                    return source.getName();
-                }
-
-                @Override
-                public boolean allowsAdd() {
-                    return source.allowsAdd();
-                }
-
-                @Override
-                public boolean allowsDelete() {
-                    return source.allowsDelete();
-                }
-
-                @Override
-                public boolean allowsEdit() {
-                    return source.allowsEdit();
-                }
-
-                @Override
-                public void save() {
-                    source.save();
-                }
-
-                @Override
-                public void load() throws AccessDeniedException {
-                    source.load();
-                }
-            };
-            for(final Host bookmark : source) {
-                if(filter.accept(bookmark)) {
-                    filtered.add(bookmark);
-                }
-            }
-            filtered.addListener(new CollectionListener<Host>() {
-                @Override
-                public void collectionLoaded() {
-                    source.collectionLoaded();
-                }
-
-                @Override
-                public void collectionItemAdded(final Host item) {
-                    source.add(item);
-                }
-
-                @Override
-                public void collectionItemRemoved(final Host item) {
-                    source.remove(item);
-                }
-
-                @Override
-                public void collectionItemChanged(final Host item) {
-                    source.collectionItemChanged(item);
-                }
-            });
+            filtered = new FilterHostCollection(source, filter);
         }
         return filtered;
     }
@@ -256,7 +198,9 @@ public class BookmarkTableDataSource extends ListDataSource {
             final NSMutableDictionary dict = NSMutableDictionary.dictionary();
             dict.setObjectForKey(BookmarkNameProvider.toString(host), "Nickname");
             dict.setObjectForKey(host.getHostname(), "Hostname");
-            dict.setObjectForKey(new HostUrlProvider().withUsername(true).withPath(true).get(host), "URL");
+            if(StringUtils.isNotBlank(host.getCredentials().getUsername())) {
+                dict.setObjectForKey(host.getCredentials().getUsername(), "Username");
+            }
             final String comment = this.getSource().getComment(host);
             if(StringUtils.isNotBlank(comment)) {
                 dict.setObjectForKey(comment, "Comment");
@@ -361,10 +305,10 @@ public class BookmarkTableDataSource extends ListDataSource {
 
     /**
      * @param info contains details on this dragging operation.
-     * @param row  The proposed location is row and action is operation.
-     *             The data source should incorporate the data from the dragging pasteboard at this time.
-     * @see NSTableView.DataSource
-     * Invoked by view when the mouse button is released over a table view that previously decided to allow a drop.
+     * @param row  The proposed location is row and action is operation. The data source should incorporate the data
+     *             from the dragging pasteboard at this time.
+     * @see NSTableView.DataSource Invoked by view when the mouse button is released over a table view that previously
+     * decided to allow a drop.
      */
     @Override
     public boolean tableView_acceptDrop_row_dropOperation(final NSTableView view, final NSDraggingInfo info,
@@ -451,7 +395,7 @@ public class BookmarkTableDataSource extends ListDataSource {
                                 h = HostParser.parse(url);
                             }
                             catch(HostParserException e) {
-                                log.warn(e.getDetail());
+                                log.warn(e);
                                 continue;
                             }
                             source.add(row.intValue(), h);
@@ -526,12 +470,12 @@ public class BookmarkTableDataSource extends ListDataSource {
     }
 
     /**
-     * @param local indicates that the candidate destination object (the window or view over which the dragged
-     *              image is currently poised) is in the same application as the source, while a NO value indicates that
-     *              the destination object is in a different application
+     * @param local indicates that the candidate destination object (the window or view over which the dragged image is
+     *              currently poised) is in the same application as the source, while a NO value indicates that the
+     *              destination object is in a different application
      * @return A mask, created by combining the dragging operations listed in the NSDragOperation section of
-     * NSDraggingInfo protocol reference using the C bitwise OR operator.If the source does not permit
-     * any dragging operations, it should return NSDragOperationNone.
+     * NSDraggingInfo protocol reference using the C bitwise OR operator.If the source does not permit any dragging
+     * operations, it should return NSDragOperationNone.
      * @see NSDraggingSource
      */
     @Override
@@ -544,12 +488,11 @@ public class BookmarkTableDataSource extends ListDataSource {
 
     /**
      * @param rowIndexes is the list of row numbers that will be participating in the drag.
-     * @return To refuse the drag, return false. To start a drag, return true and place
-     * the drag data onto pboard (data, owner, and so on).
-     * @see NSTableView.DataSource
-     * Invoked by view after it has been determined that a drag should begin, but before the drag has been started.
-     * The drag image and other drag-related information will be set up and provided by the table view once this call
-     * returns with true.
+     * @return To refuse the drag, return false. To start a drag, return true and place the drag data onto pboard (data,
+     * owner, and so on).
+     * @see NSTableView.DataSource Invoked by view after it has been determined that a drag should begin, but before the
+     * drag has been started. The drag image and other drag-related information will be set up and provided by the table
+     * view once this call returns with true.
      */
     @Override
     public boolean tableView_writeRowsWithIndexes_toPasteboard(final NSTableView view, final NSIndexSet rowIndexes,
@@ -562,19 +505,21 @@ public class BookmarkTableDataSource extends ListDataSource {
             NSPoint dragPosition = view.convertPoint_fromView(event.locationInWindow(), null);
             NSRect imageRect = new NSRect(new NSPoint(dragPosition.x.doubleValue() - 16, dragPosition.y.doubleValue() - 16), new NSSize(32, 32));
             // Writing a promised file of the host as a bookmark file to the clipboard
-            view.dragPromisedFilesOfTypes(NSArray.arrayWithObject("duck"), imageRect, this.id(), true, event);
+            if(!view.dragPromisedFilesOfTypes(NSArray.arrayWithObject("duck"), imageRect, this.id(), true, event)) {
+                log.warn(String.format("Failure for drag promise operation of %s", event));
+                return false;
+            }
             return true;
         }
         return false;
     }
 
     /**
-     * @return the names (not full paths) of the files that the receiver promises to create at dropDestination.
-     * This method is invoked when the drop has been accepted by the destination and the destination,
-     * in the case of another Cocoa application, invokes the NSDraggingInfo method
-     * namesOfPromisedFilesDroppedAtDestination.
-     * For long operations, you can cache dropDestination and defer the creation of the files until the
-     * finishedDraggingImage method to avoid blocking the destination application.
+     * @return the names (not full paths) of the files that the receiver promises to create at dropDestination. This
+     * method is invoked when the drop has been accepted by the destination and the destination, in the case of another
+     * Cocoa application, invokes the NSDraggingInfo method namesOfPromisedFilesDroppedAtDestination. For long
+     * operations, you can cache dropDestination and defer the creation of the files until the finishedDraggingImage
+     * method to avoid blocking the destination application.
      * @see NSTableView.DataSource
      */
     @Override
@@ -600,4 +545,5 @@ public class BookmarkTableDataSource extends ListDataSource {
         }
         return promisedDragNames;
     }
+
 }

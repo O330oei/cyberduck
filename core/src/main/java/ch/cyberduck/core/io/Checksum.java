@@ -21,8 +21,6 @@ package ch.cyberduck.core.io;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
-import java.util.Objects;
-
 public final class Checksum {
     private static final Logger log = Logger.getLogger(Checksum.class);
 
@@ -43,22 +41,35 @@ public final class Checksum {
         if(StringUtils.isBlank(hash)) {
             return Checksum.NONE;
         }
-        if(hash.matches("[a-fA-F0-9]{32}")) {
-            return new Checksum(HashAlgorithm.md5, hash);
+        switch(hash.length()) {
+            case 8:
+                if(hash.matches("[a-fA-F0-9]{8}")) {
+                    return new Checksum(HashAlgorithm.crc32, hash);
+                }
+                break;
+            case 32:
+                if(hash.matches("[a-fA-F0-9]{32}")) {
+                    return new Checksum(HashAlgorithm.md5, hash);
+                }
+                break;
+            case 40:
+                if(hash.matches("[a-fA-F0-9]{40}")) {
+                    return new Checksum(HashAlgorithm.sha1, hash);
+                }
+                break;
+            case 64:
+                if(hash.matches("[A-Fa-f0-9]{64}")) {
+                    return new Checksum(HashAlgorithm.sha256, hash);
+                }
+                break;
+            case 128:
+                if(hash.matches("[A-Fa-f0-9]{128}")) {
+                    return new Checksum(HashAlgorithm.sha512, hash);
+                }
+                break;
+            default:
+                log.warn(String.format("Failure to detect algorithm for checksum %s", hash));
         }
-        if(hash.matches("[a-fA-F0-9]{40}")) {
-            return new Checksum(HashAlgorithm.sha1, hash);
-        }
-        if(hash.matches("[A-Fa-f0-9]{64}")) {
-            return new Checksum(HashAlgorithm.sha256, hash);
-        }
-        if(hash.matches("[A-Fa-f0-9]{128}")) {
-            return new Checksum(HashAlgorithm.sha512, hash);
-        }
-        if(hash.matches("[a-fA-F0-9]{8}")) {
-            return new Checksum(HashAlgorithm.crc32, hash);
-        }
-        log.warn(String.format("Failure to detect algorithm for checksum %s", hash));
         return Checksum.NONE;
     }
 
@@ -74,7 +85,7 @@ public final class Checksum {
         if(algorithm != checksum.algorithm) {
             return false;
         }
-        if(!Objects.equals(hash, checksum.hash)) {
+        if(!StringUtils.equalsIgnoreCase(hash, checksum.hash)) {
             return false;
         }
         return true;

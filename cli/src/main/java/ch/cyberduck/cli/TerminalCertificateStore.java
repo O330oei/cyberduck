@@ -18,6 +18,7 @@ package ch.cyberduck.cli;
  * feedback@cyberduck.io
  */
 
+import ch.cyberduck.core.CertificateTrustCallback;
 import ch.cyberduck.core.DefaultCertificateStore;
 import ch.cyberduck.core.LocaleFactory;
 
@@ -27,16 +28,15 @@ import javax.net.ssl.SSLException;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
+import java.text.MessageFormat;
 import java.util.List;
-
-import com.amazonaws.util.StringUtils;
 
 public class TerminalCertificateStore extends DefaultCertificateStore {
 
     private final Console console = new Console();
 
     private final DefaultHostnameVerifier verifier
-            = new DefaultHostnameVerifier();
+        = new DefaultHostnameVerifier();
 
     private final TerminalPromptReader prompt;
 
@@ -49,15 +49,7 @@ public class TerminalCertificateStore extends DefaultCertificateStore {
     }
 
     @Override
-    public boolean display(final List<X509Certificate> certificates) {
-        for(X509Certificate c : certificates) {
-            console.printf("%n%s", c.toString());
-        }
-        return true;
-    }
-
-    @Override
-    public boolean isTrusted(final String hostname, final List<X509Certificate> certificates) {
+    public boolean verify(final CertificateTrustCallback callback, final String hostname, final List<X509Certificate> certificates) {
         if(certificates.isEmpty()) {
             return false;
         }
@@ -67,22 +59,17 @@ public class TerminalCertificateStore extends DefaultCertificateStore {
                 c.checkValidity();
             }
             catch(CertificateExpiredException e) {
-                return prompt.prompt(LocaleFactory.localizedString(StringUtils.replace("The certificate for this server has expired. You might be connecting to a server that " +
-                        "is pretending to be “%@” which could put your confidential information at risk. " +
-                        "Would you like to connect to the server anyway?", "%@", hostname), "Keychain"));
+                return prompt.prompt(MessageFormat.format(LocaleFactory.localizedString("The certificate for this server has expired. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?", "Keychain"), hostname));
             }
             catch(CertificateNotYetValidException e) {
-                return prompt.prompt(LocaleFactory.localizedString(StringUtils.replace("The certificate for this server is not yet valid. You might be connecting to a server that " +
-                        "is pretending to be “%@” which could put your confidential information at risk. Would you like to connect to the server anyway?", "%@", hostname), "Keychain"));
+                return prompt.prompt(MessageFormat.format(LocaleFactory.localizedString("The certificate for this server is not yet valid. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?", "Keychain"), hostname));
             }
         }
         try {
             verifier.verify(hostname, certificates.get(0));
         }
         catch(SSLException e) {
-            return prompt.prompt(LocaleFactory.localizedString(StringUtils.replace("The certificate for this server is invalid. " +
-                    "You might be connecting to a server that is pretending to be “%@” which could put " +
-                    "your confidential information at risk. Would you like to connect to the server anyway?", "%@", hostname), "Keychain"));
+            return prompt.prompt(MessageFormat.format(LocaleFactory.localizedString("The certificate for this server is invalid. You might be connecting to a server that is pretending to be {0} which could put your confidential information at risk. Would you like to connect to the server anyway?", "Keychain"), hostname));
         }
         return true;
     }

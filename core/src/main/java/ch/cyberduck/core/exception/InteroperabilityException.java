@@ -23,8 +23,20 @@ import ch.cyberduck.core.LocaleFactory;
 public class InteroperabilityException extends BackgroundException {
     private static final long serialVersionUID = 4426127443925394476L;
 
+    public InteroperabilityException() {
+        super(LocaleFactory.localizedString("Interoperability failure", "Error"), (Throwable) null);
+    }
+
     public InteroperabilityException(final String detail) {
         super(LocaleFactory.localizedString("Interoperability failure", "Error"), detail, null);
+    }
+
+    public InteroperabilityException(final String message, final String detail) {
+        super(message, detail);
+    }
+
+    public InteroperabilityException(final String message, final String detail, final Throwable cause) {
+        super(message, detail, cause);
     }
 
     public InteroperabilityException(final String detail, final Throwable cause) {

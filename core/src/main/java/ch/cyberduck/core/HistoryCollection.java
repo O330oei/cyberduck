@@ -22,12 +22,10 @@ import ch.cyberduck.core.preferences.SupportDirectoryFinderFactory;
 
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 
-public class HistoryCollection extends AbstractFolderHostCollection {
-    private static final long serialVersionUID = 2270155702956300755L;
+public class HistoryCollection extends MonitorFolderHostCollection {
 
     private static final HistoryCollection HISTORY_COLLECTION = new HistoryCollection(
         LocalFactory.get(SupportDirectoryFinderFactory.get().find(), "History")
@@ -47,12 +45,12 @@ public class HistoryCollection extends AbstractFolderHostCollection {
     @Override
     public Local getFile(final Host bookmark) {
         return LocalFactory.get(folder, String.format("%s.duck",
-                StringUtils.replace(BookmarkNameProvider.toString(bookmark), "/", ":")));
+            StringUtils.replace(BookmarkNameProvider.toString(bookmark), "/", ":")));
     }
 
     @Override
     public String getComment(final Host host) {
-        Date timestamp = host.getTimestamp();
+        final Date timestamp = host.getTimestamp();
         if(null != timestamp) {
             // Set comment to timestamp when server was last accessed
             return UserDateFormatterFactory.get().getLongFormat(timestamp.getTime());
@@ -62,39 +60,11 @@ public class HistoryCollection extends AbstractFolderHostCollection {
     }
 
     /**
-     * Does not allow duplicate entries.
-     *
-     * @param row      Row number
-     * @param bookmark Bookmark
-     */
-    @Override
-    public void add(final int row, final Host bookmark) {
-        if(this.contains(bookmark)) {
-            this.remove(bookmark);
-        }
-        super.add(row, bookmark);
-    }
-
-    /**
-     * Does not allow duplicate entries.
-     *
-     * @param bookmark Bookmark
-     * @return Always true
-     */
-    @Override
-    public boolean add(final Host bookmark) {
-        if(this.contains(bookmark)) {
-            this.remove(bookmark);
-        }
-        return super.add(bookmark);
-    }
-
-    /**
      * Sort by timestamp of bookmark file.
      */
     @Override
-    protected synchronized void sort() {
-        Collections.sort(this, new Comparator<Host>() {
+    public void sort() {
+        this.sort(new Comparator<Host>() {
             @Override
             public int compare(Host o1, Host o2) {
                 if(null == o1.getTimestamp() && null == o2.getTimestamp()) {

@@ -24,7 +24,7 @@ import ch.cyberduck.core.features.Touch;
 import ch.cyberduck.core.features.Write;
 import ch.cyberduck.core.transfer.TransferStatus;
 
-import org.cryptomator.cryptolib.api.Cryptor;
+import org.apache.commons.lang3.StringUtils;
 import org.cryptomator.cryptolib.api.FileHeader;
 
 public class CryptoTouchFeature<Reply> implements Touch<Reply> {
@@ -42,9 +42,8 @@ public class CryptoTouchFeature<Reply> implements Touch<Reply> {
     @Override
     public Path touch(final Path file, final TransferStatus status) throws BackgroundException {
         // Write header
-        final Cryptor cryptor = vault.getCryptor();
-        final FileHeader header = cryptor.fileHeaderCryptor().create();
-        status.setHeader(cryptor.fileHeaderCryptor().encryptHeader(header));
+        final FileHeader header = vault.getFileHeaderCryptor().create();
+        status.setHeader(vault.getFileHeaderCryptor().encryptHeader(header));
         status.setNonces(new RandomNonceGenerator());
         final Path target = proxy.touch(vault.encrypt(session, file), status);
         final Path decrypt = vault.decrypt(session, target);
@@ -53,8 +52,8 @@ public class CryptoTouchFeature<Reply> implements Touch<Reply> {
     }
 
     @Override
-    public boolean isSupported(final Path workdir) {
-        return proxy.isSupported(workdir);
+    public boolean isSupported(final Path workdir, final String filename) {
+        return proxy.isSupported(workdir, StringUtils.EMPTY);
     }
 
     @Override

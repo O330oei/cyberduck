@@ -30,12 +30,12 @@ import ch.cyberduck.core.features.Encryption;
 import ch.cyberduck.core.features.Headers;
 import ch.cyberduck.core.features.Redundancy;
 import ch.cyberduck.core.preferences.PreferencesFactory;
+import ch.cyberduck.core.transfer.TransferStatus;
 
 import org.apache.log4j.Logger;
 import org.jets3t.service.ServiceException;
 import org.jets3t.service.model.StorageObject;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -61,31 +61,18 @@ public class S3MetadataFeature implements Headers {
 
     @Override
     public Map<String, String> getMetadata(final Path file) throws BackgroundException {
-        if(file.isFile() || file.isPlaceholder()) {
-            try {
-                return new S3AttributesFinderFeature(session).find(file).getMetadata();
-            }
-            catch(NotfoundException e) {
-                if(file.isPlaceholder()) {
-                    // No placeholder file may exist but we just have a common prefix
-                    return Collections.emptyMap();
-                }
-                throw e;
-            }
-        }
-        return Collections.emptyMap();
+        return new S3AttributesFinderFeature(session).find(file).getMetadata();
     }
 
     @Override
-    public void setMetadata(final Path file, final Map<String, String> metadata) throws BackgroundException {
+    public void setMetadata(final Path file, final TransferStatus status) throws BackgroundException {
         if(file.isFile() || file.isPlaceholder()) {
             if(log.isDebugEnabled()) {
-                log.debug(String.format("Write metadata %s for file %s", metadata, file));
+                log.debug(String.format("Write metadata %s for file %s", status, file));
             }
             try {
-                // Make sure to copy existing attributes
-                final StorageObject target = new S3AttributesFinderFeature(session).details(file);
-                target.replaceAllMetadata(new HashMap<String, Object>(metadata));
+                final StorageObject target = new StorageObject(containerService.getKey(file));
+                target.replaceAllMetadata(new HashMap<>(status.getMetadata()));
                 // Apply non standard ACL
                 if(accessControlListFeature != null) {
                     Acl acl = Acl.EMPTY;
@@ -93,7 +80,7 @@ public class S3MetadataFeature implements Headers {
                         acl = accessControlListFeature.getPermission(file);
                     }
                     catch(AccessDeniedException | InteroperabilityException e) {
-                        log.warn(String.format("Ignore failure %s", e.getDetail()));
+                        log.warn(String.format("Ignore failure %s", e));
                     }
                     target.setAcl(accessControlListFeature.convert(acl));
                 }

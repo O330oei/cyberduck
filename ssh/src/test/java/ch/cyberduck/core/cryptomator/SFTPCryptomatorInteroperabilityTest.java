@@ -32,10 +32,11 @@ import ch.cyberduck.core.sftp.SFTPHomeDirectoryService;
 import ch.cyberduck.core.sftp.SFTPProtocol;
 import ch.cyberduck.core.sftp.SFTPReadFeature;
 import ch.cyberduck.core.sftp.SFTPSession;
+import ch.cyberduck.core.ssl.DefaultX509KeyManager;
+import ch.cyberduck.core.ssl.DisabledX509TrustManager;
 import ch.cyberduck.core.transfer.TransferStatus;
 import ch.cyberduck.core.vault.DefaultVaultRegistry;
 import ch.cyberduck.core.vault.VaultCredentials;
-import ch.cyberduck.test.IntegrationTest;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -51,7 +52,6 @@ import org.cryptomator.cryptofs.CryptoFileSystemProvider;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -61,7 +61,6 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertArrayEquals;
 
-@Category(IntegrationTest.class)
 public class SFTPCryptomatorInteroperabilityTest {
 
     private static int PORT_NUMBER = ThreadLocalRandom.current().nextInt(2000, 3000);
@@ -96,8 +95,8 @@ public class SFTPCryptomatorInteroperabilityTest {
     /**
      * Create file/folder with Cryptomator, read with Cyberduck
      */
-    @Test
-    public void testCryptomatorInteroperabilityTests() throws Exception {
+    @Test(expected = CryptoInvalidFilenameException.class)
+    public void testCryptomatorInteroperabilityLongFilename() throws Exception {
         // create folder
         final java.nio.file.Path targetFolder = cryptoFileSystem.getPath("/", new AlphanumericRandomStringService().random());
         Files.createDirectory(targetFolder);
@@ -108,7 +107,7 @@ public class SFTPCryptomatorInteroperabilityTest {
 
         // read with Cyberduck and compare
         final Host host = new Host(new SFTPProtocol(), "localhost", PORT_NUMBER, new Credentials("empty", "empty"));
-        final SFTPSession session = new SFTPSession(host);
+        final SFTPSession session = new SFTPSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
         session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
         session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
         final Path home = new SFTPHomeDirectoryService(session).find();
@@ -125,13 +124,14 @@ public class SFTPCryptomatorInteroperabilityTest {
         final byte[] readContent = new byte[content.length];
         IOUtils.readFully(read, readContent);
         assertArrayEquals(content, readContent);
+        session.close();
     }
 
     /**
      * Create long file/folder with Cryptomator, read with Cyberduck
      */
     @Test
-    public void testCryptomatorInteroperability_longNames_Tests() throws Exception {
+    public void testCryptomatorInteroperability() throws Exception {
         // create folder
         final java.nio.file.Path targetFolder = cryptoFileSystem.getPath("/", new AlphanumericRandomStringService().random());
         Files.createDirectory(targetFolder);
@@ -142,7 +142,7 @@ public class SFTPCryptomatorInteroperabilityTest {
 
         // read with Cyberduck and compare
         final Host host = new Host(new SFTPProtocol(), "localhost", PORT_NUMBER, new Credentials("empty", "empty"));
-        final SFTPSession session = new SFTPSession(host);
+        final SFTPSession session = new SFTPSession(host, new DisabledX509TrustManager(), new DefaultX509KeyManager());
         session.open(Proxy.DIRECT, new DisabledHostKeyCallback(), new DisabledLoginCallback());
         session.login(Proxy.DIRECT, new DisabledLoginCallback(), new DisabledCancelCallback());
         final Path home = new SFTPHomeDirectoryService(session).find();
@@ -159,5 +159,6 @@ public class SFTPCryptomatorInteroperabilityTest {
         final byte[] readContent = new byte[content.length];
         IOUtils.readFully(read, readContent);
         assertArrayEquals(content, readContent);
+        session.close();
     }
 }

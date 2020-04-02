@@ -62,6 +62,8 @@ import java.util.Set;
 public class Local extends AbstractPath implements Referenceable, Serializable {
     private static final Logger log = Logger.getLogger(Local.class);
 
+    public static final char DELIMITER = CharUtils.toChar(PreferencesFactory.get().getProperty("local.delimiter"));
+
     /**
      * Absolute path in local file system
      */
@@ -200,7 +202,7 @@ public class Local extends AbstractPath implements Referenceable, Serializable {
 
     @Override
     public char getDelimiter() {
-        return CharUtils.toChar(PreferencesFactory.get().getProperty("local.delimiter"));
+        return DELIMITER;
     }
 
     public void mkdir() throws AccessDeniedException {
@@ -296,7 +298,14 @@ public class Local extends AbstractPath implements Referenceable, Serializable {
      */
     @Override
     public String getName() {
-        return FilenameUtils.getName(path);
+        final char delimiter = this.getDelimiter();
+        if(String.valueOf(delimiter).equals(path)) {
+            return path;
+        }
+        if(!StringUtils.contains(path, delimiter)) {
+            return path;
+        }
+        return StringUtils.substringAfterLast(path, String.valueOf(delimiter));
     }
 
     public Local getVolume() {
@@ -397,10 +406,6 @@ public class Local extends AbstractPath implements Referenceable, Serializable {
         }
     }
 
-    /**
-     * Compares the two files using their path with a string comparision ignoring case.
-     * Implementations should override this depending on the case sensitivity of the file system.
-     */
     @Override
     public boolean equals(final Object o) {
         if(this == o) {
@@ -410,15 +415,12 @@ public class Local extends AbstractPath implements Referenceable, Serializable {
             return false;
         }
         final Local local = (Local) o;
-        if(path != null ? !path.equalsIgnoreCase(local.path) : local.path != null) {
-            return false;
-        }
-        return true;
+        return Objects.equals(path, local.path);
     }
 
     @Override
     public int hashCode() {
-        return path != null ? StringUtils.lowerCase(path).hashCode() : 0;
+        return Objects.hash(path);
     }
 
     public String toURL() {
@@ -434,7 +436,7 @@ public class Local extends AbstractPath implements Referenceable, Serializable {
             final FileChannel channel = FileChannel.open(Paths.get(path), StandardOpenOption.READ);
             return new SeekableByteChannelInputStream(channel);
         }
-        catch(IOException e) {
+        catch(RuntimeException | IOException e) {
             throw new LocalAccessDeniedException(e.getMessage(), e);
         }
     }
@@ -459,7 +461,7 @@ public class Local extends AbstractPath implements Referenceable, Serializable {
             final FileChannel channel = FileChannel.open(Paths.get(path), options);
             return Channels.newOutputStream(channel);
         }
-        catch(IOException e) {
+        catch(RuntimeException | IOException e) {
             throw new LocalAccessDeniedException(e.getMessage(), e);
         }
     }

@@ -34,6 +34,8 @@ import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.shared.DefaultAttributesFinderFeature;
 import ch.cyberduck.core.shared.DefaultFindFeature;
+import ch.cyberduck.core.threading.BackgroundExceptionCallable;
+import ch.cyberduck.core.threading.DefaultRetryCallable;
 import ch.cyberduck.core.transfer.TransferStatus;
 
 import org.apache.log4j.Logger;
@@ -75,9 +77,10 @@ public class GraphWriteFeature implements Write<Void> {
             final OneDriveFile oneDriveFile = new OneDriveFile(session.getClient(), folder,
                 URIEncoder.encode(file.getName()), OneDriveItem.ItemIdentifierType.Path);
             final OneDriveUploadSession upload = oneDriveFile.createUploadSession();
-            final ChunkedOutputStream proxy = new ChunkedOutputStream(upload, file, new TransferStatus(status));
-            return new HttpResponseOutputStream<Void>(new MemorySegementingOutputStream(proxy,
-                preferences.getInteger("onedrive.upload.multipart.partsize.minimum"))) {
+            final ChunkedOutputStream proxy = new ChunkedOutputStream(upload, file, status);
+            final int partsize = preferences.getInteger("onedrive.upload.multipart.partsize.minimum")
+                * preferences.getInteger("onedrive.upload.multipart.partsize.factor");
+            return new HttpResponseOutputStream<Void>(new MemorySegementingOutputStream(proxy, partsize)) {
                 @Override
                 public Void getStatus() {
                     return null;
@@ -114,15 +117,17 @@ public class GraphWriteFeature implements Write<Void> {
     private final class ChunkedOutputStream extends OutputStream {
         private final OneDriveUploadSession upload;
         private final Path file;
-        private final TransferStatus status;
+        private final TransferStatus overall;
         private final AtomicBoolean close = new AtomicBoolean();
 
         private Long offset = 0L;
+        private final Long length;
 
         public ChunkedOutputStream(final OneDriveUploadSession upload, final Path file, final TransferStatus status) {
             this.upload = upload;
             this.file = file;
-            this.status = status;
+            this.overall = status;
+            this.length = status.getOffset() + status.getLength();
         }
 
         @Override
@@ -135,17 +140,36 @@ public class GraphWriteFeature implements Write<Void> {
             final byte[] content = Arrays.copyOfRange(b, off, len);
             final HttpRange range = HttpRange.byLength(offset, content.length);
             final String header;
-            if(status.getLength() == -1L) {
+            if(overall.getLength() == -1L) {
                 header = String.format("%d-%d/*", range.getStart(), range.getEnd());
             }
             else {
-                header = String.format("%d-%d/%d", range.getStart(), range.getEnd(), status.getOffset() + status.getLength());
+                header = String.format("%d-%d/%d", range.getStart(), range.getEnd(), length);
             }
-            if(upload.uploadFragment(header, content) instanceof OneDriveFile.Metadata) {
-                log.info(String.format("Completed upload for %s", file));
+            try {
+                new DefaultRetryCallable<Void>(session.getHost(), new BackgroundExceptionCallable<Void>() {
+                    @Override
+                    public Void call() throws BackgroundException {
+                        try {
+                            if(upload.uploadFragment(header, content) instanceof OneDriveFile.Metadata) {
+                                log.info(String.format("Completed upload for %s", file));
+                            }
+                            else {
+                                log.debug(String.format("Uploaded fragment %s for file %s", header, file));
+                            }
+                        }
+                        catch(OneDriveAPIException e) {
+                            throw new GraphExceptionMappingService().map("Upload {0} failed", e, file);
+                        }
+                        catch(IOException e) {
+                            throw new DefaultIOExceptionMappingService().map("Upload {0} failed", e, file);
+                        }
+                        return null;
+                    }
+                }, overall).call();
             }
-            else {
-                log.debug(String.format("Uploaded fragment %s for file %s", header, file));
+            catch(BackgroundException e) {
+                throw new IOException(e.getMessage(), e);
             }
             offset += content.length;
         }

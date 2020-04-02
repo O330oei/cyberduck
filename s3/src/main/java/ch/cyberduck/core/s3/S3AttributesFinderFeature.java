@@ -18,15 +18,22 @@ package ch.cyberduck.core.s3;
  * feedback@cyberduck.io
  */
 
+import ch.cyberduck.core.AttributedList;
+import ch.cyberduck.core.DefaultPathPredicate;
+import ch.cyberduck.core.DisabledListProgressListener;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathAttributes;
 import ch.cyberduck.core.PathContainerService;
+import ch.cyberduck.core.VersioningConfiguration;
 import ch.cyberduck.core.exception.AccessDeniedException;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.InteroperabilityException;
+import ch.cyberduck.core.exception.NotfoundException;
 import ch.cyberduck.core.features.AttributesFinder;
 import ch.cyberduck.core.features.Encryption;
+import ch.cyberduck.core.features.Versioning;
 import ch.cyberduck.core.io.Checksum;
+import ch.cyberduck.core.preferences.PreferencesFactory;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -41,7 +48,6 @@ import java.util.Map;
 
 import static org.jets3t.service.Constants.AMZ_DELETE_MARKER;
 import static org.jets3t.service.Constants.AMZ_VERSION_ID;
-import static org.jets3t.service.model.S3Object.S3_VERSION_ID;
 
 public class S3AttributesFinderFeature implements AttributesFinder {
     private static final Logger log = Logger.getLogger(S3AttributesFinderFeature.class);
@@ -51,8 +57,18 @@ public class S3AttributesFinderFeature implements AttributesFinder {
     private final PathContainerService containerService
         = new S3PathContainerService();
 
+    /**
+     * Lookup previous versions
+     */
+    private final boolean references;
+
     public S3AttributesFinderFeature(final S3Session session) {
+        this(session, PreferencesFactory.get().getBoolean("s3.versioning.references.enable"));
+    }
+
+    public S3AttributesFinderFeature(final S3Session session, final boolean references) {
         this.session = session;
+        this.references = references;
     }
 
     @Override
@@ -61,6 +77,7 @@ public class S3AttributesFinderFeature implements AttributesFinder {
             return PathAttributes.EMPTY;
         }
         if(file.getType().contains(Path.Type.upload)) {
+            // Pending multipart upload
             return PathAttributes.EMPTY;
         }
         if(containerService.isContainer(file)) {
@@ -68,21 +85,51 @@ public class S3AttributesFinderFeature implements AttributesFinder {
             attributes.setRegion(new S3LocationFeature(session, session.getClient().getRegionEndpointCache()).getLocation(file).getIdentifier());
             return attributes;
         }
-        return this.toAttributes(this.details(file));
+        try {
+            final PathAttributes attr = this.details(file);
+            if(references) {
+                if(StringUtils.isNotBlank(attr.getVersionId())) {
+                    final VersioningConfiguration versioning = null != session.getFeature(Versioning.class) ? session.getFeature(Versioning.class).getConfiguration(
+                        containerService.getContainer(file)
+                    ) : VersioningConfiguration.empty();
+                    if(versioning.isEnabled()) {
+                        // Add references to previous versions
+                        final AttributedList<Path> list = new S3VersionedObjectListService(session, true).list(file, new DisabledListProgressListener());
+                        final Path versioned = list.find(new DefaultPathPredicate(file));
+                        if(null != versioned) {
+                            attr.setVersions(versioned.attributes().getVersions());
+                        }
+                    }
+                }
+            }
+            return attr;
+        }
+        catch(NotfoundException e) {
+            if(file.isPlaceholder()) {
+                // File may be marked as placeholder but not placeholder file exists. Check for common prefix returned.
+                try {
+                    new S3ObjectListService(session).list(file, new DisabledListProgressListener(), containerService.getKey(file), 1);
+                }
+                catch(NotfoundException n) {
+                    throw e;
+                }
+                // Common prefix only
+                return PathAttributes.EMPTY;
+            }
+            throw e;
+        }
     }
 
-    protected StorageObject details(final Path file) throws BackgroundException {
+    protected PathAttributes details(final Path file) throws BackgroundException {
         final String container = containerService.getContainer(file).getName();
         try {
-            return session.getClient().getVersionedObjectDetails(file.attributes().getVersionId(),
-                container, containerService.getKey(file));
+            return this.toAttributes(session.getClient().getVersionedObjectDetails(file.attributes().getVersionId(),
+                container, containerService.getKey(file)));
         }
         catch(ServiceException e) {
             if(null != e.getResponseHeaders()) {
                 if(e.getResponseHeaders().containsKey(AMZ_DELETE_MARKER)) {
-                    final S3Object marker = new S3Object();
-                    marker.addMetadata(S3_VERSION_ID, e.getResponseHeaders().get(AMZ_VERSION_ID));
-                    return marker;
+                    return new PathAttributes().withVersionId(e.getResponseHeaders().get(AMZ_VERSION_ID));
                 }
             }
             final BackgroundException failure = new S3ExceptionMappingService().map("Failure to read attributes of {0}", e, file);
@@ -97,7 +144,7 @@ public class S3AttributesFinderFeature implements AttributesFinder {
                             final S3Object object = session.getClient().getVersionedObject(file.attributes().getVersionId(),
                                 containerService.getContainer(file).getName(), containerService.getKey(file));
                             IOUtils.closeQuietly(object.getDataInputStream());
-                            return object;
+                            return this.toAttributes(object);
                         }
                         catch(ServiceException f) {
                             throw new S3ExceptionMappingService().map("Failure to read attributes of {0}", f, file);
@@ -108,7 +155,7 @@ public class S3AttributesFinderFeature implements AttributesFinder {
                 log.warn(String.format("Missing permission to read object details for %s %s", file, e.getMessage()));
                 final StorageObject object = new StorageObject(containerService.getKey(file));
                 object.setBucketName(container);
-                return object;
+                return this.toAttributes(object);
             }
             throw failure;
         }
@@ -157,12 +204,14 @@ public class S3AttributesFinderFeature implements AttributesFinder {
             // not the MD5 of the object data.
             attributes.setChecksum(Checksum.parse(object.getETag()));
         }
-        final HashMap<String, String> metadata = new HashMap<String, String>();
-        final Map<String, Object> source = object.getModifiableMetadata();
-        for(Map.Entry<String, Object> entry : source.entrySet()) {
-            metadata.put(entry.getKey(), entry.getValue().toString());
+        if(!object.getModifiableMetadata().isEmpty()) {
+            final HashMap<String, String> metadata = new HashMap<String, String>();
+            final Map<String, Object> source = object.getModifiableMetadata();
+            for(Map.Entry<String, Object> entry : source.entrySet()) {
+                metadata.put(entry.getKey(), entry.getValue().toString());
+            }
+            attributes.setMetadata(metadata);
         }
-        attributes.setMetadata(metadata);
         return attributes;
     }
 }

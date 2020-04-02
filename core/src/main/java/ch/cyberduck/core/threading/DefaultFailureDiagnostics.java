@@ -26,6 +26,7 @@ import ch.cyberduck.core.exception.LoginFailureException;
 import ch.cyberduck.core.exception.ResolveFailedException;
 import ch.cyberduck.core.exception.SSLNegotiateException;
 import ch.cyberduck.core.exception.UnsupportedException;
+import ch.cyberduck.core.io.IOResumeException;
 
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.http.NoHttpResponseException;
@@ -47,23 +48,23 @@ public final class DefaultFailureDiagnostics implements FailureDiagnostics<Backg
         if(log.isDebugEnabled()) {
             log.debug(String.format("Determine cause for failure %s", failure));
         }
-        if(failure instanceof LoginFailureException) {
-            return Type.login;
-        }
-        if(failure instanceof ConnectionCanceledException) {
-            return Type.cancel;
-        }
-        if(failure instanceof UnsupportedException) {
-            return Type.unsupported;
-        }
         for(Throwable cause : ExceptionUtils.getThrowableList(failure)) {
+            if(failure instanceof UnsupportedException) {
+                return Type.unsupported;
+            }
+            if(failure instanceof LoginFailureException) {
+                return Type.login;
+            }
+            if(cause instanceof ResolveFailedException) {
+                return Type.network;
+            }
+            if(failure instanceof ConnectionCanceledException) {
+                return Type.cancel;
+            }
             if(cause instanceof ConnectionTimeoutException) {
                 return Type.network;
             }
             if(cause instanceof ConnectionRefusedException) {
-                return Type.network;
-            }
-            if(cause instanceof ResolveFailedException) {
                 return Type.network;
             }
             if(cause instanceof SSLNegotiateException) {
@@ -82,6 +83,7 @@ public final class DefaultFailureDiagnostics implements FailureDiagnostics<Backg
                 return Type.network;
             }
             if(cause instanceof SocketException
+                || cause instanceof IOResumeException
                 || cause instanceof TimeoutException // Used in Promise#retrieve
                 || cause instanceof SocketTimeoutException
                 || cause instanceof UnknownHostException) {

@@ -50,8 +50,8 @@ public abstract class SessionBackgroundAction<T> extends AbstractBackgroundActio
     /**
      * Contains the transcript of the session while this action was running
      */
-    private StringBuilder transcript
-        = new StringBuilder();
+    private StringBuffer transcript
+        = new StringBuffer();
 
     private static final String LINE_SEPARATOR
         = System.getProperty("line.separator");
@@ -107,7 +107,7 @@ public abstract class SessionBackgroundAction<T> extends AbstractBackgroundActio
     @Override
     public T call() throws BackgroundException {
         try {
-            return new DefaultRetryCallable<T>(new BackgroundExceptionCallable<T>() {
+            return new DefaultRetryCallable<T>(pool.getHost(), new BackgroundExceptionCallable<T>() {
                 @Override
                 public T call() throws BackgroundException {
                     // Reset status
@@ -135,30 +135,15 @@ public abstract class SessionBackgroundAction<T> extends AbstractBackgroundActio
         }
         catch(LoginFailureException e) {
             if(PreferencesFactory.get().getBoolean("connection.retry.login.enable")) {
-                final Host bookmark = pool.getHost();
-                try {
-                    // Prompt for new credentials
-                    final KeychainLoginService service = new KeychainLoginService(PasswordStoreFactory.get());
-                    final StringAppender details = new StringAppender();
-                    details.append(LocaleFactory.localizedString("Login failed", "Credentials"));
-                    details.append(e.getDetail());
-                    if(service.prompt(bookmark, details.toString(), login, new LoginOptions(bookmark.getProtocol()))) {
-                        // Try to authenticate again
-                        service.authenticate(ProxyFactory.get().find(bookmark), session, progress, login, new CancelCallback() {
-                            @Override
-                            public void verify() throws ConnectionCanceledException {
-                                if(SessionBackgroundAction.this.isCanceled()) {
-                                    throw new ConnectionCanceledException();
-                                }
-                            }
-                        });
-                        // Run action again after login
-                        return this.run();
-                    }
+                if(log.isInfoEnabled()) {
+                    log.info(String.format("Prompt to re-authenticate for failure %s", e));
                 }
-                catch(BackgroundException f) {
-                    log.warn(String.format("Ignore error %s after login failure %s ", f, e));
+                if(this.login(session, e)) {
+                    return this.run();
                 }
+            }
+            else {
+                log.warn(String.format("Disabled retry for login failure %s", e));
             }
             failure = e;
             throw e;
@@ -170,6 +155,37 @@ public abstract class SessionBackgroundAction<T> extends AbstractBackgroundActio
         finally {
             pool.release(session.removeListener(this), failure);
         }
+    }
+
+    protected boolean login(final Session<?> session, final LoginFailureException e) {
+        final Host bookmark = pool.getHost();
+        try {
+            // Prompt for new credentials
+            final KeychainLoginService service = new KeychainLoginService(PasswordStoreFactory.get());
+            final StringAppender details = new StringAppender();
+            details.append(LocaleFactory.localizedString("Login failed", "Credentials"));
+            details.append(e.getDetail());
+            if(service.prompt(bookmark, details.toString(), login, new LoginOptions(bookmark.getProtocol()))) {
+                if(log.isDebugEnabled()) {
+                    log.debug(String.format("Re-authenticate with credentials %s", bookmark.getCredentials()));
+                }
+                // Try to authenticate again
+                service.authenticate(ProxyFactory.get().find(bookmark), session, progress, login, new CancelCallback() {
+                    @Override
+                    public void verify() throws ConnectionCanceledException {
+                        if(SessionBackgroundAction.this.isCanceled()) {
+                            throw new ConnectionCanceledException();
+                        }
+                    }
+                });
+                // Run action again after login
+                return true;
+            }
+        }
+        catch(BackgroundException f) {
+            log.warn(String.format("Ignore error %s after login failure %s ", f, e));
+        }
+        return false;
     }
 
     public abstract T run(final Session<?> session) throws BackgroundException;
@@ -184,7 +200,7 @@ public abstract class SessionBackgroundAction<T> extends AbstractBackgroundActio
             log.info(String.format("Run alert callback %s for failure %s", alert, failure));
         }
         // Display alert if the action was not canceled intentionally
-        return alert.alert(pool.getHost(), failure, transcript);
+        return alert.alert(pool.getHost(), failure, new StringBuilder(transcript.toString()));
     }
 
     @Override

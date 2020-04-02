@@ -32,7 +32,9 @@ import ch.cyberduck.core.Path;
 import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.Scheme;
 import ch.cyberduck.core.dav.microsoft.MicrosoftIISDAVAttributesFinderFeature;
+import ch.cyberduck.core.dav.microsoft.MicrosoftIISDAVFindFeature;
 import ch.cyberduck.core.dav.microsoft.MicrosoftIISDAVListService;
+import ch.cyberduck.core.dav.microsoft.MicrosoftIISDAVReadFeature;
 import ch.cyberduck.core.dav.microsoft.MicrosoftIISDAVTimestampFeature;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.ConnectionCanceledException;
@@ -47,9 +49,6 @@ import ch.cyberduck.core.preferences.Preferences;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.proxy.Proxy;
 import ch.cyberduck.core.shared.DefaultHomeFinderService;
-import ch.cyberduck.core.ssl.DefaultX509KeyManager;
-import ch.cyberduck.core.ssl.DisabledX509TrustManager;
-import ch.cyberduck.core.ssl.ThreadLocalHostnameDelegatingTrustManager;
 import ch.cyberduck.core.ssl.X509KeyManager;
 import ch.cyberduck.core.ssl.X509TrustManager;
 import ch.cyberduck.core.threading.CancelCallback;
@@ -73,11 +72,11 @@ import org.apache.http.impl.client.SystemDefaultCredentialsProvider;
 import org.apache.http.impl.client.WinHttpClients;
 import org.apache.log4j.Logger;
 
-import javax.net.SocketFactory;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.text.MessageFormat;
+import java.util.Arrays;
 
 import com.github.sardine.impl.SardineException;
 import com.github.sardine.impl.handler.ValidatingResponseHandler;
@@ -92,40 +91,23 @@ public class DAVSession extends HttpSession<DAVClient> {
     private final Preferences preferences
         = PreferencesFactory.get();
 
-    /**
-     * Detected Microsoft IIS
-     */
-    private boolean iis;
-
-    public DAVSession(final Host host) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(new DisabledX509TrustManager(), host.getHostname()), new DefaultX509KeyManager());
-    }
+    private ListService list = new DAVListService(this, new DAVAttributesFinderFeature(this));
+    private Read read = new DAVReadFeature(this);
+    private Timestamp timestamp = new DAVTimestampFeature(this);
+    private AttributesFinder attributes = new DAVAttributesFinderFeature(this);
+    private Find find = new DAVFindFeature(this);
 
     public DAVSession(final Host host, final X509TrustManager trust, final X509KeyManager key) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(trust, host.getHostname()), key);
-    }
-
-    public DAVSession(final Host host, final RedirectCallback redirect) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(new DisabledX509TrustManager(), host.getHostname()), new DefaultX509KeyManager());
-        this.redirect = redirect;
+        super(host, trust, key);
     }
 
     public DAVSession(final Host host, final X509TrustManager trust, final X509KeyManager key, final RedirectCallback redirect) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(trust, host.getHostname()), key);
-        this.redirect = redirect;
-    }
-
-    public DAVSession(final Host host, final X509TrustManager trust, final X509KeyManager key, final SocketFactory socketFactory) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(trust, host.getHostname()), key, socketFactory);
-    }
-
-    public DAVSession(final Host host, final X509TrustManager trust, final X509KeyManager key, final SocketFactory socketFactory, final RedirectCallback redirect) {
-        super(host, new ThreadLocalHostnameDelegatingTrustManager(trust, host.getHostname()), key, socketFactory);
+        super(host, trust, key);
         this.redirect = redirect;
     }
 
     @Override
-    public DAVClient connect(final Proxy proxy, final HostKeyCallback key, final LoginCallback prompt) {
+    public DAVClient connect(final Proxy proxy, final HostKeyCallback key, final LoginCallback prompt) throws BackgroundException {
         // Always inject new pool to builder on connect because the pool is shutdown on disconnect
         final HttpClientBuilder pool = builder.build(proxy, this, prompt);
         pool.setRedirectStrategy(new DAVRedirectStrategy(redirect));
@@ -207,15 +189,17 @@ public class DAVSession extends HttpSession<DAVClient> {
                 client.execute(new HttpHead(new DAVPathEncoder().encode(home)), new ValidatingResponseHandler<Void>() {
                     @Override
                     public Void handleResponse(final HttpResponse response) throws IOException {
-                        for(Header h : response.getAllHeaders()) {
-                            if(HttpHeaders.SERVER.equals(h.getName())) {
-                                iis = StringUtils.contains(h.getValue(), "Microsoft-IIS");
-                                if(iis) {
-                                    if(log.isDebugEnabled()) {
-                                        log.debug("Microsoft-IIS backend detected - use IIS WebDAV features");
-                                    }
-                                }
-                                break;
+                        if(Arrays.stream(response.getAllHeaders()).anyMatch(header ->
+                            HttpHeaders.SERVER.equals(header.getName()) && StringUtils.contains(header.getValue(), "Microsoft-IIS"))) {
+                            if(log.isDebugEnabled()) {
+                                log.debug("Microsoft-IIS backend detected");
+                            }
+                            list = new MicrosoftIISDAVListService(DAVSession.this, new MicrosoftIISDAVAttributesFinderFeature(DAVSession.this));
+                            timestamp = new MicrosoftIISDAVTimestampFeature(DAVSession.this);
+                            attributes = new MicrosoftIISDAVAttributesFinderFeature(DAVSession.this);
+                            if(preferences.getBoolean("webdav.microsoftiis.header.translate")) {
+                                read = new MicrosoftIISDAVReadFeature(DAVSession.this);
+                                find = new MicrosoftIISDAVFindFeature(DAVSession.this);
                             }
                         }
                         this.validateResponse(response);
@@ -225,6 +209,7 @@ public class DAVSession extends HttpSession<DAVClient> {
             }
             catch(SardineException e) {
                 switch(e.getStatusCode()) {
+                    case HttpStatus.SC_NOT_IMPLEMENTED:
                     case HttpStatus.SC_FORBIDDEN:
                     case HttpStatus.SC_NOT_FOUND:
                     case HttpStatus.SC_UNSUPPORTED_MEDIA_TYPE:
@@ -329,20 +314,19 @@ public class DAVSession extends HttpSession<DAVClient> {
     @SuppressWarnings("unchecked")
     public <T> T _getFeature(final Class<T> type) {
         if(type == ListService.class) {
-            return iis ? (T) new MicrosoftIISDAVListService(this, new MicrosoftIISDAVAttributesFinderFeature(this)) :
-                (T) new DAVListService(this, new DAVAttributesFinderFeature(this));
+            return (T) list;
         }
         if(type == Directory.class) {
             return (T) new DAVDirectoryFeature(this);
         }
         if(type == Read.class) {
-            return (T) new DAVReadFeature(this);
+            return (T) read;
         }
         if(type == Write.class) {
             return (T) new DAVWriteFeature(this);
         }
         if(type == Upload.class) {
-            return (T) new DAVUploadFeature(new DAVWriteFeature(this));
+            return (T) new DAVUploadFeature(this._getFeature(Write.class));
         }
         if(type == Delete.class) {
             return (T) new DAVDeleteFeature(this);
@@ -360,13 +344,13 @@ public class DAVSession extends HttpSession<DAVClient> {
             return (T) new DAVCopyFeature(this);
         }
         if(type == Find.class) {
-            return (T) new DAVFindFeature(this);
+            return (T) find;
         }
         if(type == AttributesFinder.class) {
-            return iis ? (T) new MicrosoftIISDAVAttributesFinderFeature(this) : (T) new DAVAttributesFinderFeature(this);
+            return (T) attributes;
         }
         if(type == Timestamp.class) {
-            return iis ? (T) new MicrosoftIISDAVTimestampFeature(this) : (T) new DAVTimestampFeature(this);
+            return (T) timestamp;
         }
         if(type == Quota.class) {
             return (T) new DAVQuotaFeature(this);

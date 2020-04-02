@@ -18,6 +18,7 @@ package ch.cyberduck.core;
  */
 
 import ch.cyberduck.core.exception.BackgroundException;
+import ch.cyberduck.core.exception.LocalAccessDeniedException;
 import ch.cyberduck.core.exception.LoginCanceledException;
 import ch.cyberduck.core.exception.LoginFailureException;
 import ch.cyberduck.core.proxy.Proxy;
@@ -138,7 +139,11 @@ public class KeychainLoginService implements LoginService {
             credentials.setSaved(input.isSaved());
             credentials.setToken(input.getPassword());
         }
-        return options.password || options.token;
+        if(options.oauth) {
+            log.warn(String.format("Reset OAuth tokens for %s", bookmark));
+            credentials.setOauth(OAuthTokens.EMPTY);
+        }
+        return options.password || options.token || options.oauth;
     }
 
     @Override
@@ -146,8 +151,22 @@ public class KeychainLoginService implements LoginService {
                                 final LoginCallback prompt, final CancelCallback cancel) throws BackgroundException {
         final Host bookmark = session.getHost();
         final Credentials credentials = bookmark.getCredentials();
-        listener.message(MessageFormat.format(LocaleFactory.localizedString("Authenticating as {0}", "Status"),
-            StringUtils.isEmpty(credentials.getUsername()) ? LocaleFactory.localizedString("Unknown") : credentials.getUsername()));
+        if(credentials.isPasswordAuthentication()) {
+            listener.message(MessageFormat.format(LocaleFactory.localizedString("Authenticating as {0}", "Status"),
+                credentials.getUsername()));
+        }
+        else if(credentials.isOAuthAuthentication()) {
+            listener.message(MessageFormat.format(LocaleFactory.localizedString("Authenticating as {0}", "Status"),
+                credentials.getOauth().getAccessToken()));
+        }
+        else if(credentials.isPublicKeyAuthentication()) {
+            listener.message(MessageFormat.format(LocaleFactory.localizedString("Authenticating as {0}", "Status"),
+                credentials.getIdentity().getName()));
+        }
+        else if(credentials.isCertificateAuthentication()) {
+            listener.message(MessageFormat.format(LocaleFactory.localizedString("Authenticating as {0}", "Status"),
+                credentials.getCertificate()));
+        }
         try {
             if(log.isDebugEnabled()) {
                 log.debug(String.format("Attempt authentication for %s", bookmark));
@@ -157,12 +176,24 @@ public class KeychainLoginService implements LoginService {
                 log.debug(String.format("Login successful for session %s", session));
             }
             listener.message(LocaleFactory.localizedString("Login successful", "Credentials"));
-            // Write credentials to keychain
-            keychain.save(bookmark);
+            if(credentials.isSaved()) {
+                // Write credentials to keychain
+                try {
+                    keychain.save(bookmark);
+                }
+                catch(LocalAccessDeniedException e) {
+                    log.error(String.format("Failure saving credentials for %s in keychain. %s", session, e));
+                }
+            }
+            else {
+                if(log.isInfoEnabled()) {
+                    log.info(String.format("Skip writing credentials for bookmark %s", bookmark.getHostname()));
+                }
+            }
             // Flag for successful authentication
             credentials.setPassed(true);
-            // Nullify password.
-            credentials.setPassword(null);
+            // Nullify password and tokens
+            credentials.reset();
             return true;
         }
         catch(LoginFailureException e) {
@@ -176,7 +207,8 @@ public class KeychainLoginService implements LoginService {
                 // Retry
                 return false;
             }
-            // No updated credentials
+            // No updated credentials. Nullify input
+            credentials.reset();
             throw e;
         }
     }

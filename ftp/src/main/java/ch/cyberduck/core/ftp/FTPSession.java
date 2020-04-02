@@ -23,6 +23,7 @@ import ch.cyberduck.core.HostKeyCallback;
 import ch.cyberduck.core.ListService;
 import ch.cyberduck.core.LocaleFactory;
 import ch.cyberduck.core.LoginCallback;
+import ch.cyberduck.core.Protocol;
 import ch.cyberduck.core.ProtocolFactory;
 import ch.cyberduck.core.Scheme;
 import ch.cyberduck.core.cdn.DistributionConfiguration;
@@ -49,7 +50,6 @@ import ch.cyberduck.core.proxy.Proxy;
 import ch.cyberduck.core.proxy.ProxySocketFactory;
 import ch.cyberduck.core.shared.DefaultCopyFeature;
 import ch.cyberduck.core.ssl.CustomTrustSSLProtocolSocketFactory;
-import ch.cyberduck.core.ssl.DefaultTrustManagerHostnameCallback;
 import ch.cyberduck.core.ssl.DefaultX509KeyManager;
 import ch.cyberduck.core.ssl.DisabledX509TrustManager;
 import ch.cyberduck.core.ssl.SSLSession;
@@ -57,12 +57,14 @@ import ch.cyberduck.core.ssl.X509KeyManager;
 import ch.cyberduck.core.ssl.X509TrustManager;
 import ch.cyberduck.core.threading.CancelCallback;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.net.ftp.FTPClientConfig;
 import org.apache.commons.net.ftp.FTPCmd;
 import org.apache.commons.net.ftp.FTPReply;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -77,7 +79,7 @@ public class FTPSession extends SSLSession<FTPClient> {
     private UnixPermission permission;
     private Symlink symlink;
     private FTPListService listService;
-    private Case casesensitivity = Case.sensitive;
+    private Protocol.Case casesensitivity = Protocol.Case.sensitive;
 
     public FTPSession(final Host h) {
         this(h, new DisabledX509TrustManager(), new DefaultX509KeyManager());
@@ -131,7 +133,7 @@ public class FTPSession extends SSLSession<FTPClient> {
 
     protected void configure(final FTPClient client) throws IOException {
         client.setProtocol(host.getProtocol());
-        client.setSocketFactory(new ProxySocketFactory(host.getProtocol(), new DefaultTrustManagerHostnameCallback(host)));
+        client.setSocketFactory(new ProxySocketFactory(host));
         client.setControlEncoding(host.getEncoding());
         final int timeout = preferences.getInteger("connection.timeout.seconds") * 1000;
         client.setConnectTimeout(timeout);
@@ -198,7 +200,7 @@ public class FTPSession extends SSLSession<FTPClient> {
     }
 
     @Override
-    public Case getCase() {
+    public Protocol.Case getCaseSensitivity() {
         return casesensitivity;
     }
 
@@ -250,7 +252,7 @@ public class FTPSession extends SSLSession<FTPClient> {
                     // Negotiate data connection security
                     client.execPROT(preferences.getProperty("ftp.tls.datachannel"));
                 }
-                if("UTF-8".equals(host.getEncoding())) {
+                if(StandardCharsets.UTF_8.name().equals(host.getEncoding())) {
                     if(client.hasFeature("UTF8")) {
                         if(!FTPReply.isPositiveCompletion(client.sendCommand("OPTS UTF8 ON"))) {
                             log.warn(String.format("Failed to negotiate UTF-8 charset %s", client.getReplyString()));
@@ -261,11 +263,11 @@ public class FTPSession extends SSLSession<FTPClient> {
                 if(log.isInfoEnabled()) {
                     log.info(String.format("Reset parser to timezone %s", zone));
                 }
-                String system = null; //Unknown
+                String system = StringUtils.EMPTY; //Unknown
                 try {
                     system = client.getSystemType();
                     if(system.toUpperCase(Locale.ROOT).contains(FTPClientConfig.SYST_NT)) {
-                        casesensitivity = Case.insensitive;
+                        casesensitivity = Protocol.Case.insensitive;
                     }
                 }
                 catch(IOException e) {
@@ -331,7 +333,7 @@ public class FTPSession extends SSLSession<FTPClient> {
             return (T) new FTPCommandFeature(this);
         }
         if(type == DistributionConfiguration.class) {
-            return (T) new CustomOriginCloudFrontDistributionConfiguration(host);
+            return (T) new CustomOriginCloudFrontDistributionConfiguration(host, trust, key);
         }
         if(type == Home.class) {
             return (T) new FTPWorkdirService(this);
