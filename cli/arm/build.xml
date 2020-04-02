@@ -58,7 +58,7 @@
             <arg value="--java-options"/>
             <arg value="-Djava.net.useSystemProxies=true"/>
             <arg value="--main-jar"/>
-            <arg value="cli-${version}.jar"/>
+            <arg value="cli-${fullversion}.jar"/>
             <arg value="--main-class"/>
             <arg value="ch.cyberduck.cli.Terminal"/>
             <arg value="--icon"/>
