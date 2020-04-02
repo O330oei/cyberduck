@@ -65,7 +65,7 @@
             <arg value="--license-file"/>
             <arg value="${home}/LICENSE.txt"/>
             <arg value="--linux-deb-maintainer"/>
-            <arg value="cyberduck.io <feedback@cyberduck.io>"/>
+            <arg value="cyberduck.io &lt;feedback@cyberduck.io&gt;"/>
             <arg value="--linux-rpm-license-type"/>
             <arg value="GPL"/>
             <arg value="--linux-shortcut"/>
