@@ -18,6 +18,9 @@
 
     <import file="../../build.xml"/>
 
+    <property name="app.name" value="duck"/>
+    <property name="app.icon" value="${home}/cyberduck-application.png"/>
+
     <target name="build" depends="version">
         <property name="build.input" value="${build}/package"/>
         <mkdir dir="${build.input}"/>
