@@ -73,7 +73,6 @@
             <arg value="cyberduck.io &lt;feedback@cyberduck.io&gt;"/>
             <arg value="--linux-rpm-license-type"/>
             <arg value="GPL"/>
-            <arg value="--linux-shortcut"/>
             <arg value="--verbose"/>
         </exec>
     </target>
