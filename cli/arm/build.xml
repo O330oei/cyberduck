@@ -32,7 +32,7 @@
             </fileset>
         </copy>
         <echo message="Copy ${setup}/deb/duck.postinstall to ${build.input}"/>
-        <copy file="${setup}/deb/duck.postinstall" to="${build.input}/postinst"/>
+        <copy file="${setup}/deb/duck.postinstall" tofile="${build.input}/postinst"/>
         <copy file="${setup}/deb/duck.postinstall" tofile="${build}/postinst"/>
         <echo message="Create native bundles with jpackage for version ${version}, fullversion ${fullversion}"/>
         <exec executable="/usr/lib/jvm/jdk-14+36/bin/jpackage">
