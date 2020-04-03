@@ -36,7 +36,7 @@
         <copy file="${setup}/deb/duck.postinstall" tofile="${build.resources}/postinst"/>
         <copy file="${setup}/deb/duck.postrm" tofile="${build.resources}/postrm"/>
         <echo message="Create native bundles with jpackage for version ${version}, fullversion ${fullversion}"/>
-        <exec executable="/usr/lib/jvm/jdk-14+36/bin/jpackage">
+        <exec executable="/usr/lib/jvm/jdk-14/bin/jpackage">
             <arg value="--name"/>
             <arg value="${app.name}"/>
             <arg value="--input"/>
