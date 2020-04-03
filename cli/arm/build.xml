@@ -43,7 +43,7 @@
             <arg value="--dest"/>
             <arg value="${build.deploy}"/>
             <arg value="--app-version"/>
-            <arg value="${version}"/>
+            <arg value="${version}.${revision}"/>
             <arg value="--java-options"/>
             <arg value="-Djna.nounpack=true"/>
             <arg value="--java-options"/>
