@@ -1,0 +1,1 @@
+ln -sf /opt/duck/bin/duck /usr/local/bin/duck
