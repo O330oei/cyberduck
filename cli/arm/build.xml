@@ -19,7 +19,6 @@
     <import file="../../build.xml"/>
 
     <property name="app.name" value="duck"/>
-    <property name="app.icon" value="${home}/cyberduck-application.png"/>
 
     <property name="build.input" value="${build}/package"/>
     <property name="build.resources" value="${build}/resources"/>
@@ -36,7 +35,6 @@
         </copy>
         <copy file="${setup}/deb/duck.postinstall" tofile="${build.resources}/postinst"/>
         <copy file="${setup}/deb/duck.postrm" tofile="${build.resources}/postrm"/>
-        <copy file="${setup}/deb/duck.control.arm" tofile="${build.resources}/control"/>
         <echo message="Create native bundles with jpackage for version ${version}, fullversion ${fullversion}"/>
         <exec executable="/usr/lib/jvm/jdk-14+36/bin/jpackage">
             <arg value="--name"/>
@@ -73,14 +71,14 @@
             <arg value="${copyright}"/>
             <arg value="--description"/>
             <arg value="${app.name}"/>
+            <arg value="--vendor"/>
+            <arg value="cyberduck.io"/>
             <arg value="--license-file"/>
             <arg value="${home}/LICENSE.txt"/>
             <arg value="--linux-deb-maintainer"/>
             <arg value="&lt;feedback@cyberduck.io&gt;"/>
             <arg value="--linux-rpm-license-type"/>
             <arg value="GPL"/>
-            <arg value="--linux-app-release"/>
-            <arg value="0"/>
             <arg value="--verbose"/>
         </exec>
     </target>
