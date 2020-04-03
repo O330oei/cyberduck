@@ -31,7 +31,7 @@
                 <include name="profiles/*.cyberduckprofile"/>
             </fileset>
         </copy>
-        <copy file="${setup}/deb/duck.postinstall.arm" tofile="${build.resources}/postinst"/>
+        <copy file="${setup}/deb/duck.postinstall" tofile="${build.resources}/postinst"/>
         <copy file="${setup}/deb/duck.postrm" tofile="${build.resources}/postrm"/>
         <echo message="Create native bundles with jpackage for version ${version}, fullversion ${fullversion}"/>
         <exec executable="/usr/lib/jvm/adoptopenjdk-14/bin/jpackage">
