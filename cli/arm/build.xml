@@ -31,6 +31,8 @@
                 <include name="profiles/*.cyberduckprofile"/>
             </fileset>
         </copy>
+        <copy file="${setup}/deb/duck.postinstall" tofile="${build.input}"/>
+        <copy file="${setup}/deb/duck.postinstall" tofile="${build}"/>
         <echo message="Create native bundles with jpackage"/>
         <exec executable="/usr/lib/jvm/jdk-14+36/bin/jpackage">
             <arg value="--name"/>
