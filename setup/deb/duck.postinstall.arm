@@ -1,1 +1,2 @@
 ln -sf /opt/duck/bin/duck /usr/local/bin/duck
+sed -i '/app.classpath/s/$/\:$ROOTDIR\/lib\/app\/profiles\//' /opt/duck/lib/app/duck.cfg
