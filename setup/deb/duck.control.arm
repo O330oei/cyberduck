@@ -5,6 +5,7 @@ Priority: optional
 Architecture: armhf
 Provides: APPLICATION_PACKAGE
 Description: APPLICATION_SUMMARY
+Depends: libasound2, libbsd0, libc6, libx11-6, libxau6, libxcb1, libxdmcp6, libxext6, libxi6, libxrender1, libxtst6, zlib1g
 Installed-Size: APPLICATION_INSTALLED_SIZE
 Homepage: https://duck.sh
 License: GPL
