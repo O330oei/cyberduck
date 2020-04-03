@@ -21,9 +21,12 @@
     <property name="app.name" value="duck"/>
     <property name="app.icon" value="${home}/cyberduck-application.png"/>
 
+    <property name="build.input" value="${build}/package"/>
+    <property name="build.resources" value="${build}/resources"/>
+
     <target name="build" depends="version">
-        <property name="build.input" value="${build}/package"/>
         <mkdir dir="${build.input}"/>
+        <mkdir dir="${build.resources}"/>
         <copy todir="${build.input}">
             <fileset dir="${build}">
                 <include name="*.jar"/>
@@ -31,9 +34,8 @@
                 <include name="profiles/*.cyberduckprofile"/>
             </fileset>
         </copy>
-        <echo message="Copy ${setup}/deb/duck.postinstall to ${build.input}"/>
-        <copy file="${setup}/deb/duck.postinstall" tofile="${build.input}/postinst"/>
-        <copy file="${setup}/deb/duck.postinstall" tofile="${build}/postinst"/>
+        <echo message="Copy ${setup}/deb/duck.postinstall to ${build.resources}/postinst"/>
+        <copy file="${setup}/deb/duck.postinstall" tofile="${build.resources}/postinst"/>
         <echo message="Create native bundles with jpackage for version ${version}, fullversion ${fullversion}"/>
         <exec executable="/usr/lib/jvm/jdk-14+36/bin/jpackage">
             <arg value="--name"/>
@@ -64,6 +66,8 @@
             <arg value="cli-${fullversion}.jar"/>
             <arg value="--main-class"/>
             <arg value="ch.cyberduck.cli.Terminal"/>
+            <arg value="--resource-dir"/>
+            <arg value="${build.resources}"/>
             <arg value="--icon"/>
             <arg value="${app.icon}"/>
             <arg value="--copyright"/>
