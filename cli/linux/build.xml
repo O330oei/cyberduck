@@ -18,6 +18,8 @@
 
     <import file="../../build.xml"/>
 
+    <property name="app.name" value="duck"/>
+
     <property name="build.input" value="${build}/package"/>
     <property name="build.resources" value="${build}/resources"/>
 
