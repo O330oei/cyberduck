@@ -31,6 +31,7 @@
                 <include name="profiles/*.cyberduckprofile"/>
             </fileset>
         </copy>
+        <echo message="Copy ${setup}/deb/duck.postinstall to ${build.input}"/>
         <copy file="${setup}/deb/duck.postinstall" tofile="${build.input}"/>
         <copy file="${setup}/deb/duck.postinstall" tofile="${build}"/>
         <echo message="Create native bundles with jpackage"/>
