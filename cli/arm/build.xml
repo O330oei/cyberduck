@@ -79,6 +79,8 @@
             <arg value="&lt;feedback@cyberduck.io&gt;"/>
             <arg value="--linux-rpm-license-type"/>
             <arg value="GPL"/>
+            <arg value="--linux-app-release"/>
+            <arg value="0"/>
             <arg value="--verbose"/>
         </exec>
     </target>
